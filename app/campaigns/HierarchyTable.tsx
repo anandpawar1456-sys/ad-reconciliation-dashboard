@@ -31,7 +31,11 @@ export default function HierarchyTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterToSelected, setFilterToSelected] = useState(false);
 
-  const visibleRows = filterToSelected ? rows.filter((r) => selected.has(r.id)) : rows;
+  // Guard against a stale filter: if every selected row gets unchecked
+  // without hitting "Clear", filterToSelected can stay true with an empty
+  // selection, which would otherwise render an empty, all-zero table with
+  // no visible way back (the "N selected" banner disappears at 0).
+  const visibleRows = filterToSelected && selected.size > 0 ? rows.filter((r) => selected.has(r.id)) : rows;
 
   const totals = useMemo(
     () =>
@@ -73,6 +77,7 @@ export default function HierarchyTable({
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      if (next.size === 0) setFilterToSelected(false);
       return next;
     });
   }

@@ -31,6 +31,10 @@ export default async function AdSetDetailPage({
 
   const ads = await getAdSummaries(params.adsetId, resolved.since, resolved.until);
 
+  const dateParams: Record<string, string> = { range: preset };
+  if (searchParams.since) dateParams.since = searchParams.since;
+  if (searchParams.until) dateParams.until = searchParams.until;
+
   return (
     <div>
       <NavBar />
@@ -60,7 +64,12 @@ export default async function AdSetDetailPage({
         </div>
 
         <div className="mt-6 section-card overflow-x-auto">
-          <HierarchyTable rows={ads} nameLabel="Ad" />
+          <HierarchyTable
+            rows={ads}
+            nameLabel="Ad"
+            linkBase={`/campaigns/${params.id}/adsets/${params.adsetId}/ads`}
+            linkQuery={new URLSearchParams(dateParams).toString()}
+          />
         </div>
       </main>
     </div>

@@ -187,3 +187,44 @@ export async function getAdSetName(adsetId: string): Promise<{ name: string; cam
   const a = await prisma.metaAdSet.findUnique({ where: { id: adsetId } });
   return a ? { name: a.name, campaignId: a.campaignId } : null;
 }
+
+export async function getAdName(adId: string): Promise<{ name: string; adsetId: string } | null> {
+  const a = await prisma.metaAd.findUnique({ where: { id: adId } });
+  return a ? { name: a.name, adsetId: a.adsetId } : null;
+}
+
+export type AdCustomer = {
+  orderId: string;
+  contactId: string;
+  email: string | null;
+  phone: string | null;
+  amount: number;
+  productName: string | null;
+  funnelStage: string;
+  status: string;
+  occurredAt: Date;
+};
+
+// Who actually bought from a specific ad — the GHL orders whose contact
+// was attributed (via UTM/ad_id) to this ad, in the given range. Shows
+// every status (not just "completed") so pending/refunded orders are
+// still visible for context, same as the funnel/reconciliation views.
+export async function getAdCustomers(adId: string, since: Date, until: Date): Promise<AdCustomer[]> {
+  const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
+  const orders = await prisma.ghlOrder.findMany({
+    where: { occurredAt: { gte: since, lt: untilExclusive }, contact: { adId } },
+    include: { contact: { select: { email: true, phone: true } } },
+    orderBy: { occurredAt: "desc" },
+  });
+  return orders.map((o) => ({
+    orderId: o.id,
+    contactId: o.contactId,
+    email: o.contact.email,
+    phone: o.contact.phone,
+    amount: Number(o.amount),
+    productName: o.productName,
+    funnelStage: o.funnelStage,
+    status: o.status,
+    occurredAt: o.occurredAt,
+  }));
+}
