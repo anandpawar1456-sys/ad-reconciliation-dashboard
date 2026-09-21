@@ -78,10 +78,24 @@ async function upsertAdAttribution(
   metaRows: MetaInsight[]
 ) {
   const ghlRevenueByAd = new Map<string, number>();
+  // Fallback campaign/adset id for an ad, from GHL's OWN captured
+  // attribution on the contact — needed because an ad can have real GHL
+  // revenue on a day Meta reported zero data for it (e.g. it wasn't
+  // served that day), leaving no MetaInsight row to read campaignId from.
+  // Without this fallback, that recovered revenue silently drops out of
+  // every campaign/ad-set rollup (it was still counted at the ad level,
+  // just invisible one level up).
+  const contactIdsByAd = new Map<string, { campaignId: string | null; adsetId: string | null }>();
   for (const order of orders) {
     const adId = order.contact?.adId;
     if (!adId) continue;
     ghlRevenueByAd.set(adId, (ghlRevenueByAd.get(adId) ?? 0) + Number(order.amount));
+    if (!contactIdsByAd.has(adId)) {
+      contactIdsByAd.set(adId, {
+        campaignId: order.contact?.campaignId ?? null,
+        adsetId: order.contact?.adsetId ?? null,
+      });
+    }
   }
 
   const metaByAd = new Map(metaRows.filter((r) => r.adId).map((r) => [r.adId as string, r]));
@@ -92,6 +106,9 @@ async function upsertAdAttribution(
     const meta = metaByAd.get(adId);
     const metaSpend = meta ? Number(meta.spend) : 0;
     const metaRevenue = meta ? Number(meta.purchaseValue) : 0;
+    const fallback = contactIdsByAd.get(adId);
+    const campaignId = meta?.campaignId ?? fallback?.campaignId ?? null;
+    const adsetId = meta?.adsetId ?? fallback?.adsetId ?? null;
 
     // The portion of GHL revenue Meta's own reporting doesn't reflect for
     // this ad. Floored at zero: if Meta reports MORE than GHL (e.g. a
@@ -108,8 +125,8 @@ async function upsertAdAttribution(
       create: {
         date: dayStart,
         adId,
-        adsetId: meta?.adsetId,
-        campaignId: meta?.campaignId,
+        adsetId,
+        campaignId,
         adName: meta?.adName,
         metaSpend,
         metaRevenue,
@@ -120,8 +137,8 @@ async function upsertAdAttribution(
         trueRoas,
       },
       update: {
-        adsetId: meta?.adsetId,
-        campaignId: meta?.campaignId,
+        adsetId,
+        campaignId,
         adName: meta?.adName,
         metaSpend,
         metaRevenue,

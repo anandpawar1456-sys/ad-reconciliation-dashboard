@@ -20,7 +20,8 @@ export async function GET(req: NextRequest) {
   const settings = await getSettings();
   const timeZone = settings.reportingTimezone || DEFAULT_TIMEZONE;
   const until = toLocalDateLabel(new Date(), timeZone);
-  const since = new Date(until.getTime() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const lookbackDays = Number(req.nextUrl.searchParams.get("days") ?? LOOKBACK_DAYS);
+  const since = new Date(until.getTime() - (Number.isFinite(lookbackDays) ? lookbackDays : LOOKBACK_DAYS) * 24 * 60 * 60 * 1000);
   const days = await computeRollupRange(since, until);
 
   return NextResponse.json({ ok: true, rollupDays: days });
