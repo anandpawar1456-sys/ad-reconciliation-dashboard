@@ -7,6 +7,7 @@ import LogoutButton from "./LogoutButton";
 const LINKS = [
   { href: "/dashboard", label: "Overview" },
   { href: "/reconciliation", label: "Reconciliation" },
+  { href: "/campaigns", label: "Campaigns" },
   { href: "/true-roas", label: "True ROAS" },
   { href: "/funnel", label: "Funnel" },
   { href: "/missing-transactions", label: "Missing" },
@@ -26,7 +27,7 @@ export default function NavBar() {
 
         <nav className="flex items-center gap-1 overflow-x-auto">
           {LINKS.map((link) => {
-            const active = pathname === link.href;
+            const active = pathname === link.href || pathname.startsWith(link.href + "/");
             return (
               <Link
                 key={link.href}

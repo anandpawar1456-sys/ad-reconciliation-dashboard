@@ -24,6 +24,11 @@ export type MetaInsightRow = {
   spend: number;
   purchases: number;
   purchaseValue: number;
+  impressions: number;
+  clicks: number;
+  ctr: number; // percent, as Meta reports it
+  frequency: number;
+  reach: number;
 };
 
 export async function fetchMetaInsights(params: {
@@ -34,6 +39,9 @@ export async function fetchMetaInsights(params: {
 }): Promise<MetaInsightRow[]> {
   const { accessToken, adAccountId, since, until } = params;
 
+  // Extra fields (impressions/clicks/ctr/frequency/reach) ride along on the
+  // same call — no change in how often we call Meta, just more of what
+  // each call returns.
   const fields = [
     "campaign_id",
     "campaign_name",
@@ -45,6 +53,11 @@ export async function fetchMetaInsights(params: {
     "actions",
     "action_values",
     "date_start",
+    "impressions",
+    "clicks",
+    "ctr",
+    "frequency",
+    "reach",
   ].join(",");
 
   const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${adAccountId}/insights`);
@@ -78,6 +91,11 @@ export async function fetchMetaInsights(params: {
         spend: Number(item.spend ?? 0),
         purchases: pickByPriority(item.actions, PURCHASE_ACTION_PRIORITY),
         purchaseValue: pickByPriority(item.action_values, PURCHASE_ACTION_PRIORITY),
+        impressions: Number(item.impressions ?? 0),
+        clicks: Number(item.clicks ?? 0),
+        ctr: Number(item.ctr ?? 0),
+        frequency: Number(item.frequency ?? 0),
+        reach: Number(item.reach ?? 0),
       });
     }
 
@@ -94,4 +112,52 @@ function pickByPriority(entries: MetaActionEntry[] | undefined, priority: string
     if (match) return Number(match.value ?? 0);
   }
   return 0;
+}
+
+export type MetaCampaignRow = {
+  id: string;
+  name: string;
+  status: string; // ACTIVE | PAUSED | DELETED | ARCHIVED
+  effectiveStatus: string; // e.g. ACTIVE, PAUSED, CAMPAIGN_PAUSED, ADSET_PAUSED
+  objective?: string;
+};
+
+// A separate endpoint from insights — the campaign's own object, for its
+// current status. Called once per sync alongside fetchMetaInsights, not on
+// its own separate schedule.
+export async function fetchMetaCampaigns(params: {
+  accessToken: string;
+  adAccountId: string;
+}): Promise<MetaCampaignRow[]> {
+  const { accessToken, adAccountId } = params;
+
+  const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${adAccountId}/campaigns`);
+  url.searchParams.set("fields", "id,name,status,effective_status,objective");
+  url.searchParams.set("limit", "200");
+  url.searchParams.set("access_token", accessToken);
+
+  const rows: MetaCampaignRow[] = [];
+  let nextUrl: string | null = url.toString();
+
+  while (nextUrl) {
+    const res: Response = await fetch(nextUrl, { cache: "no-store" });
+    if (!res.ok) {
+      throw new Error(`Meta campaigns fetch failed (${res.status}): ${await res.text()}`);
+    }
+    const json = await res.json();
+
+    for (const item of json.data ?? []) {
+      rows.push({
+        id: item.id,
+        name: item.name,
+        status: item.status,
+        effectiveStatus: item.effective_status,
+        objective: item.objective,
+      });
+    }
+
+    nextUrl = json.paging?.next ?? null;
+  }
+
+  return rows;
 }

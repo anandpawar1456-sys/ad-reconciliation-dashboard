@@ -121,6 +121,11 @@ model MetaInsight {
   purchases     Int      @default(0)
   purchaseValue Decimal  @db.Decimal(12, 2) @default(0)
   reportedRoas  Decimal? @db.Decimal(10, 4)
+  impressions   Int      @default(0)
+  clicks        Int      @default(0)
+  ctr           Decimal  @db.Decimal(8, 4) @default(0)
+  frequency     Decimal  @db.Decimal(8, 4) @default(0)
+  reach         Int      @default(0)
   rawPayload    Json?
   createdAt     DateTime @default(now())
 
@@ -204,4 +209,19 @@ model ProductFunnelMap {
   funnelStage String // FRONT_END | ORDER_BUMP_1 | ORDER_BUMP_2 | UPSELL_1 | UPSELL_2 | UPSELL_3
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// Synced from GET /{ad_account_id}/campaigns (separate from MetaInsight,
+// which only has performance numbers, not status) — refreshed on the same
+// sync cadence as insights, not polled separately.
+model MetaCampaign {
+  id              String   @id // Meta campaign id
+  name            String
+  status          String // ACTIVE | PAUSED | DELETED | ARCHIVED
+  effectiveStatus String // ACTIVE | PAUSED | CAMPAIGN_PAUSED | ADSET_PAUSED | ...
+  objective       String?
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  @@index([status])
 }

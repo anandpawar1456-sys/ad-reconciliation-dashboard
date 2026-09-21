@@ -1,27 +1,40 @@
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
-import { fetchMetaInsights } from "@/lib/meta";
+import { fetchMetaInsights, fetchMetaCampaigns } from "@/lib/meta";
 import { computeRollupRange } from "@/lib/rollup";
 
-export type MetaSyncResult = { rows: number; since: string; until: string; rollupDays: number };
+export type MetaSyncResult = {
+  rows: number;
+  campaigns: number;
+  since: string;
+  until: string;
+  rollupDays: number;
+};
 
 // One call = one Meta Insights API request (paginated internally by
-// fetchMetaInsights) for the given [since, until] range. Used both by the
-// routine hourly/daily sync (a few days' lookback) and, called with an
-// explicit wider range, for a one-time historical backfill — still just a
-// single API call per invocation, not repeated polling.
+// fetchMetaInsights) for the given [since, until] range, plus one campaigns
+// list call for status. Used both by the routine hourly/daily sync (a few
+// days' lookback) and, called with an explicit wider range, for a one-time
+// historical backfill — still a fixed small number of API calls per
+// invocation, not repeated polling.
 export async function syncMetaInsights(since: string, until: string): Promise<MetaSyncResult> {
   const settings = await getSettings();
   if (!settings.metaAccessToken || !settings.metaAdAccountId) {
     throw new Error("Meta not configured");
   }
 
-  const rows = await fetchMetaInsights({
-    accessToken: settings.metaAccessToken,
-    adAccountId: settings.metaAdAccountId,
-    since,
-    until,
-  });
+  const [rows, campaigns] = await Promise.all([
+    fetchMetaInsights({
+      accessToken: settings.metaAccessToken,
+      adAccountId: settings.metaAdAccountId,
+      since,
+      until,
+    }),
+    fetchMetaCampaigns({
+      accessToken: settings.metaAccessToken,
+      adAccountId: settings.metaAdAccountId,
+    }),
+  ]);
 
   for (const row of rows) {
     const adsetId = row.adsetId ?? "";
@@ -51,6 +64,11 @@ export async function syncMetaInsights(since: string, until: string): Promise<Me
         purchases: row.purchases,
         purchaseValue: row.purchaseValue,
         reportedRoas,
+        impressions: row.impressions,
+        clicks: row.clicks,
+        ctr: row.ctr,
+        frequency: row.frequency,
+        reach: row.reach,
         rawPayload: row as unknown as object,
       },
       update: {
@@ -61,7 +79,31 @@ export async function syncMetaInsights(since: string, until: string): Promise<Me
         purchases: row.purchases,
         purchaseValue: row.purchaseValue,
         reportedRoas,
+        impressions: row.impressions,
+        clicks: row.clicks,
+        ctr: row.ctr,
+        frequency: row.frequency,
+        reach: row.reach,
         rawPayload: row as unknown as object,
+      },
+    });
+  }
+
+  for (const campaign of campaigns) {
+    await prisma.metaCampaign.upsert({
+      where: { id: campaign.id },
+      create: {
+        id: campaign.id,
+        name: campaign.name,
+        status: campaign.status,
+        effectiveStatus: campaign.effectiveStatus,
+        objective: campaign.objective,
+      },
+      update: {
+        name: campaign.name,
+        status: campaign.status,
+        effectiveStatus: campaign.effectiveStatus,
+        objective: campaign.objective,
       },
     });
   }
@@ -73,5 +115,5 @@ export async function syncMetaInsights(since: string, until: string): Promise<Me
 
   const rollupDays = await computeRollupRange(new Date(since), new Date(until));
 
-  return { rows: rows.length, since, until, rollupDays };
+  return { rows: rows.length, campaigns: campaigns.length, since, until, rollupDays };
 }
