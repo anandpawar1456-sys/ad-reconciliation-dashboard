@@ -132,9 +132,6 @@ export type OverviewData = {
     trueRevenue: number;
     avgTrueRoas: number | null;
   };
-  topAds: AdAttributionTotal[];
-  funnelBreakdown: FunnelStageTotal[];
-  unmatchedCount: number;
 };
 
 // The single consolidated query behind the homepage — everything for one
@@ -144,13 +141,12 @@ export type OverviewData = {
 export async function getOverviewData(since: Date, until: Date): Promise<OverviewData> {
   const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
 
-  const [reconciliationRows, attributionRows, unmatchedCount] = await Promise.all([
+  const [reconciliationRows, attributionRows] = await Promise.all([
     prisma.dailyReconciliation.findMany({
       where: { date: { gte: since, lt: untilExclusive } },
       orderBy: { date: "asc" },
     }),
     prisma.adAttribution.findMany({ where: { date: { gte: since, lt: untilExclusive } } }),
-    prisma.unmatchedTransaction.count({ where: { status: "NEEDS_REVIEW" } }),
   ]);
 
   const series: DailySeriesPoint[] = reconciliationRows.map((r) => ({
@@ -180,64 +176,75 @@ export async function getOverviewData(since: Date, until: Date): Promise<Overvie
   );
   const metaSpend = attributionRows.reduce((sum, r) => sum + Number(r.metaSpend), 0);
   const trueRevenue = attributionRows.reduce((sum, r) => sum + Number(r.trueRevenue), 0);
+  // Gap compares GHL's real revenue against what Meta REPORTED AS REVENUE
+  // from purchases it tracked — not against ad spend, which is a different
+  // number entirely (see the Meta Ad Spend / Meta Reported Revenue tiles).
   const gapAmount = totals.ghlRevenue - totals.metaRevenue;
   const gapPercent = totals.metaRevenue > 0 ? (gapAmount / totals.metaRevenue) * 100 : totals.ghlRevenue > 0 ? 100 : 0;
   const avgTrueRoas = metaSpend > 0 ? trueRevenue / metaSpend : null;
 
-  const byAd = new Map<string, AdAttributionTotal>();
-  for (const row of attributionRows) {
-    const existing = byAd.get(row.adId) ?? {
-      adId: row.adId,
-      adName: row.adName,
-      adsetId: row.adsetId,
-      campaignId: row.campaignId,
-      metaSpend: 0,
-      metaRevenue: 0,
-      metaRoas: null,
-      ghlRevenue: 0,
-      recoveredRevenue: 0,
-      trueRevenue: 0,
-      trueRoas: null,
-    };
-    existing.adName = row.adName ?? existing.adName;
-    existing.metaSpend += Number(row.metaSpend);
-    existing.metaRevenue += Number(row.metaRevenue);
-    existing.ghlRevenue += Number(row.ghlRevenue);
-    existing.recoveredRevenue += Number(row.recoveredRevenue);
-    existing.trueRevenue += Number(row.trueRevenue);
-    byAd.set(row.adId, existing);
-  }
-  const topAds = [...byAd.values()]
-    .map((ad) => ({
-      ...ad,
-      metaRoas: ad.metaSpend > 0 ? ad.metaRevenue / ad.metaSpend : null,
-      trueRoas: ad.metaSpend > 0 ? ad.trueRevenue / ad.metaSpend : null,
-    }))
-    .sort((a, b) => b.trueRevenue - a.trueRevenue)
-    .slice(0, 5);
-
-  const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: since, lt: untilExclusive }, status: "completed" },
-    select: { funnelStage: true, amount: true },
-  });
-  const byStage = new Map<string, FunnelStageTotal>();
-  for (const order of orders) {
-    const entry = byStage.get(order.funnelStage) ?? {
-      funnelStage: order.funnelStage,
-      revenue: 0,
-      transactions: 0,
-    };
-    entry.revenue += Number(order.amount);
-    entry.transactions += 1;
-    byStage.set(order.funnelStage, entry);
-  }
-  const funnelBreakdown = [...byStage.values()].sort((a, b) => b.revenue - a.revenue);
-
   return {
     series,
     totals: { ...totals, metaSpend, gapAmount, gapPercent, trueRevenue, avgTrueRoas },
-    topAds,
-    funnelBreakdown,
-    unmatchedCount,
   };
+}
+
+export type HourlyPoint = { hour: number; ghlRevenue: number; transactions: number };
+
+// For a single-day view: buckets that day's completed GHL orders by hour
+// of day in the given timezone. Meta doesn't get an hourly line here —
+// that needs a separate Insights API call with an hourly breakdown, which
+// we're holding off on to keep Meta call volume low (see the "don't poll
+// Meta frequently" constraint).
+export async function getHourlyGhlRevenue(dayLabel: Date, timeZone: string): Promise<HourlyPoint[]> {
+  const { getUtcDayRange } = await import("@/lib/timezone");
+  const { start, end } = getUtcDayRange(dayLabel, timeZone);
+
+  const orders = await prisma.ghlOrder.findMany({
+    where: { occurredAt: { gte: start, lt: end }, status: "completed" },
+    select: { amount: true, occurredAt: true },
+  });
+
+  const buckets: HourlyPoint[] = Array.from({ length: 24 }, (_, hour) => ({ hour, ghlRevenue: 0, transactions: 0 }));
+  const hourFormatter = new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hour12: false });
+
+  for (const order of orders) {
+    const hourStr = hourFormatter.format(order.occurredAt);
+    const hour = Number(hourStr) % 24;
+    buckets[hour].ghlRevenue += Number(order.amount);
+    buckets[hour].transactions += 1;
+  }
+
+  return buckets;
+}
+
+export type DayTransaction = { id: string; time: string; amount: number; email: string | null; productName: string | null };
+
+// The individual-order timeline shown under the hourly chart on a
+// single-day view, so "what sold at what time" is answerable directly,
+// not just inferred from the bar heights.
+export async function getDayTransactions(dayLabel: Date, timeZone: string): Promise<DayTransaction[]> {
+  const { getUtcDayRange } = await import("@/lib/timezone");
+  const { start, end } = getUtcDayRange(dayLabel, timeZone);
+
+  const orders = await prisma.ghlOrder.findMany({
+    where: { occurredAt: { gte: start, lt: end }, status: "completed" },
+    include: { contact: true },
+    orderBy: { occurredAt: "desc" },
+  });
+
+  const timeFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  return orders.map((o) => ({
+    id: o.id,
+    time: timeFormatter.format(o.occurredAt),
+    amount: Number(o.amount),
+    email: o.contact?.email ?? null,
+    productName: o.productName ?? o.sourceName ?? null,
+  }));
 }

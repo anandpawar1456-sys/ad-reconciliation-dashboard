@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { RANGE_PRESETS, type RangePreset } from "@/lib/dateRanges";
+import Calendar from "./Calendar";
 
 export default function DateRangePicker({
   currentPreset,
@@ -12,8 +13,7 @@ export default function DateRangePicker({
   currentLabel: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [customSince, setCustomSince] = useState("");
-  const [customUntil, setCustomUntil] = useState("");
+  const [showCalendar, setShowCalendar] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -22,6 +22,7 @@ export default function DateRangePicker({
     function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
+        setShowCalendar(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -29,23 +30,23 @@ export default function DateRangePicker({
   }, []);
 
   function selectPreset(preset: RangePreset) {
-    if (preset === "custom") return; // handled by the apply button instead
     const params = new URLSearchParams(searchParams.toString());
     params.set("range", preset);
     params.delete("since");
     params.delete("until");
     router.push(`/dashboard?${params.toString()}`);
     setOpen(false);
+    setShowCalendar(false);
   }
 
-  function applyCustom() {
-    if (!customSince || !customUntil) return;
+  function applyCustomRange(since: string, until: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("range", "custom");
-    params.set("since", customSince);
-    params.set("until", customUntil);
+    params.set("since", since);
+    params.set("until", until);
     router.push(`/dashboard?${params.toString()}`);
     setOpen(false);
+    setShowCalendar(false);
   }
 
   return (
@@ -61,47 +62,36 @@ export default function DateRangePicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-64 rounded-2xl border border-white/60 bg-white/95 p-2 shadow-soft backdrop-blur-xl">
-          {RANGE_PRESETS.filter((p) => p.value !== "custom").map((p) => (
+        <div className="absolute right-0 z-20 mt-2 flex gap-2">
+          <div className="w-48 rounded-2xl border border-white/60 bg-white/95 p-2 shadow-soft backdrop-blur-xl">
+            {RANGE_PRESETS.filter((p) => p.value !== "custom").map((p) => (
+              <button
+                key={p.value}
+                onClick={() => selectPreset(p.value)}
+                className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-medium transition ${
+                  currentPreset === p.value
+                    ? "bg-aurora-blue text-white"
+                    : "text-ink-700 hover:bg-ink-900/5"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
             <button
-              key={p.value}
-              onClick={() => selectPreset(p.value)}
+              onClick={() => setShowCalendar((v) => !v)}
               className={`block w-full rounded-xl px-3 py-2 text-left text-sm font-medium transition ${
-                currentPreset === p.value
-                  ? "bg-aurora-blue text-white"
-                  : "text-ink-700 hover:bg-ink-900/5"
+                currentPreset === "custom" ? "bg-aurora-blue text-white" : "text-ink-700 hover:bg-ink-900/5"
               }`}
             >
-              {p.label}
-            </button>
-          ))}
-
-          <div className="mt-1 border-t border-ink-900/10 pt-2">
-            <div className="px-3 pb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400">
               Custom range
-            </div>
-            <div className="flex flex-col gap-2 px-3 pb-2">
-              <input
-                type="date"
-                value={customSince}
-                onChange={(e) => setCustomSince(e.target.value)}
-                className="rounded-lg border border-ink-900/10 bg-white px-2.5 py-1.5 text-sm"
-              />
-              <input
-                type="date"
-                value={customUntil}
-                onChange={(e) => setCustomUntil(e.target.value)}
-                className="rounded-lg border border-ink-900/10 bg-white px-2.5 py-1.5 text-sm"
-              />
-              <button
-                onClick={applyCustom}
-                disabled={!customSince || !customUntil}
-                className="btn-primary py-1.5 text-xs disabled:opacity-50"
-              >
-                Apply
-              </button>
-            </div>
+            </button>
           </div>
+
+          {showCalendar && (
+            <div className="rounded-2xl border border-white/60 bg-white/95 p-3 shadow-soft backdrop-blur-xl">
+              <Calendar onRangeSelected={applyCustomRange} />
+            </div>
+          )}
         </div>
       )}
     </div>
