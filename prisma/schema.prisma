@@ -177,6 +177,7 @@ model IntegrationSettings {
   alertEmail            String?
   lastMetaSyncAt        DateTime?
   lastGhlSyncAt         DateTime?
+  lastAlertSentForDate  DateTime? // guards against re-sending the same day's alert twice
   updatedAt             DateTime @updatedAt
 }
 
