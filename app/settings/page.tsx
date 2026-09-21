@@ -25,6 +25,7 @@ export default async function SettingsPage() {
               ghlLocationId: settings.ghlLocationId ?? "",
               metaAccessTokenMasked: maskSecret(settings.metaAccessToken),
               metaAdAccountId: settings.metaAdAccountId ?? "",
+              reportingTimezone: settings.reportingTimezone,
               alertThresholdPercent: Number(settings.alertThresholdPercent),
               alertEmail: settings.alertEmail ?? "",
             }}

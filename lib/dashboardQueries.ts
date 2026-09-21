@@ -1,8 +1,14 @@
 import { prisma } from "@/lib/prisma";
-import { toUtcDateOnly } from "@/lib/rollup";
+
+// Window filters below don't need to be exact label-date boundaries — a
+// day of slop on a "last N days" display window is inconsequential, unlike
+// the actual rollup bucketing in lib/rollup.ts which must be precise.
+function daysAgo(days: number): Date {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+}
 
 export async function getDailyReconciliation(days: number) {
-  const since = toUtcDateOnly(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+  const since = daysAgo(days);
   return prisma.dailyReconciliation.findMany({
     where: { date: { gte: since } },
     orderBy: { date: "desc" },
@@ -27,7 +33,7 @@ export type AdAttributionTotal = {
 // from the sums (rather than averaging daily ratios, which would skew
 // low-spend days too heavily).
 export async function getAdAttributionTotals(days: number): Promise<AdAttributionTotal[]> {
-  const since = toUtcDateOnly(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+  const since = daysAgo(days);
   const rows = await prisma.adAttribution.findMany({ where: { date: { gte: since } } });
 
   const byAd = new Map<string, AdAttributionTotal>();
@@ -71,7 +77,7 @@ export type FunnelStageTotal = {
 };
 
 export async function getFunnelBreakdown(days: number): Promise<FunnelStageTotal[]> {
-  const since = toUtcDateOnly(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+  const since = daysAgo(days);
   const orders = await prisma.ghlOrder.findMany({
     where: { occurredAt: { gte: since }, status: { notIn: ["refunded", "void", "cancelled"] } },
     select: { funnelStage: true, amount: true },

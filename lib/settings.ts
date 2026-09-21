@@ -19,6 +19,7 @@ export type SettingsUpdateInput = {
   ghlLocationId?: string;
   metaAccessToken?: string;
   metaAdAccountId?: string;
+  reportingTimezone?: string;
   alertThresholdPercent?: number;
   alertEmail?: string;
 };
@@ -32,6 +33,7 @@ export async function updateSettings(input: SettingsUpdateInput) {
   if (input.ghlLocationId) data.ghlLocationId = input.ghlLocationId;
   if (input.metaAccessToken) data.metaAccessToken = input.metaAccessToken;
   if (input.metaAdAccountId) data.metaAdAccountId = input.metaAdAccountId;
+  if (input.reportingTimezone) data.reportingTimezone = input.reportingTimezone;
   if (input.alertEmail) data.alertEmail = input.alertEmail;
   if (input.alertThresholdPercent !== undefined && !Number.isNaN(input.alertThresholdPercent)) {
     data.alertThresholdPercent = input.alertThresholdPercent;

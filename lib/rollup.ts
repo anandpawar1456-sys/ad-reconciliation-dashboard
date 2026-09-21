@@ -1,42 +1,44 @@
 import { prisma } from "@/lib/prisma";
 import type { GhlOrder, GhlContact, MetaInsight } from "@prisma/client";
+import { getSettings } from "@/lib/settings";
+import { getUtcDayRange, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
 // Orders in these statuses don't count as real revenue.
 const EXCLUDED_STATUSES = ["refunded", "void", "cancelled"];
 
-export function toUtcDateOnly(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
-
-// Recomputes DailyReconciliation and AdAttribution for a single UTC day from
-// raw GhlOrder/GhlContact/MetaInsight rows. Called synchronously (for just
-// today) right after a GHL webhook lands, so sales reflect immediately —
-// and from the hourly Meta-sync cron (for the last few days), so ad-level
-// numbers catch up once Meta's own data arrives.
-export async function computeDailyRollup(day: Date): Promise<void> {
-  const dayStart = toUtcDateOnly(day);
-  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+// Recomputes DailyReconciliation and AdAttribution for a single day from
+// raw GhlOrder/GhlContact/MetaInsight rows. `labelDate` must already be a
+// label date (Y-M-D only, from lib/timezone's toLocalDateLabel) — this
+// function does NOT re-interpret it through a timezone, since doing so
+// twice would shift the day. Called synchronously (for just today) right
+// after a GHL webhook lands, so sales reflect immediately — and from the
+// hourly Meta-sync cron (for the last few days), so ad-level numbers catch
+// up once Meta's own data arrives.
+export async function computeDailyRollup(labelDate: Date): Promise<void> {
+  const settings = await getSettings();
+  const timeZone = settings.reportingTimezone || DEFAULT_TIMEZONE;
+  const { start, end } = getUtcDayRange(labelDate, timeZone);
 
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: dayStart, lt: dayEnd }, status: { notIn: EXCLUDED_STATUSES } },
+    where: { occurredAt: { gte: start, lt: end }, status: { notIn: EXCLUDED_STATUSES } },
     include: { contact: true },
   });
 
   const metaRows = await prisma.metaInsight.findMany({
-    where: { date: dayStart, level: "ad" },
+    where: { date: labelDate, level: "ad" },
   });
 
-  await upsertDailyReconciliation(dayStart, orders, metaRows);
-  await upsertAdAttribution(dayStart, orders, metaRows);
+  await upsertDailyReconciliation(labelDate, orders, metaRows);
+  await upsertAdAttribution(labelDate, orders, metaRows);
   await flagUnmatchedTransactions(orders);
 }
 
+// `since`/`until` must already be label dates (see computeDailyRollup).
 export async function computeRollupRange(since: Date, until: Date): Promise<number> {
-  let cursor = toUtcDateOnly(since);
-  const end = toUtcDateOnly(until);
+  let cursor = since;
   let days = 0;
 
-  while (cursor <= end) {
+  while (cursor <= until) {
     await computeDailyRollup(cursor);
     days += 1;
     cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);

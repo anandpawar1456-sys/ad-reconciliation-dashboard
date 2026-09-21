@@ -173,6 +173,10 @@ model IntegrationSettings {
   ghlLocationId         String?
   metaAccessToken       String?
   metaAdAccountId       String?
+  // IANA timezone name. Must match the Meta ad account's own configured
+  // reporting timezone for day-bucketed numbers to line up — see
+  // lib/timezone.ts.
+  reportingTimezone     String   @default("America/Los_Angeles")
   alertThresholdPercent Decimal  @db.Decimal(6, 2) @default(10)
   alertEmail            String?
   lastMetaSyncAt        DateTime?

@@ -1,6 +1,6 @@
 import NavBar from "../dashboard/NavBar";
 import { getDailyReconciliation } from "@/lib/dashboardQueries";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatLabelDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +40,7 @@ export default async function ReconciliationPage() {
                   const positive = gapAmount > 0;
                   return (
                     <tr key={row.date.toISOString()} className="border-b border-ink-900/5 last:border-0">
-                      <td className="py-3 pr-4 font-medium text-ink-900">{formatDate(row.date)}</td>
+                      <td className="py-3 pr-4 font-medium text-ink-900">{formatLabelDate(row.date)}</td>
                       <td className="py-3 pr-4 text-ink-700">{formatCurrency(Number(row.ghlRevenue))}</td>
                       <td className="py-3 pr-4 text-ink-700">{row.ghlTransactions}</td>
                       <td className="py-3 pr-4 text-ink-700">{formatCurrency(Number(row.metaRevenue))}</td>

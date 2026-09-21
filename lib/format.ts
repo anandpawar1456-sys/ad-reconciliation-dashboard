@@ -13,3 +13,16 @@ export function formatRoas(value: number | null): string {
 export function formatDate(d: Date): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(d);
 }
+
+// For "label dates" (DailyReconciliation.date, AdAttribution.date, etc — see
+// lib/timezone.ts) which are stored as UTC-midnight Y-M-D encodings, not
+// real instants. Must format with timeZone: "UTC" or the displayed date can
+// shift by a day depending on where the server rendering it is located.
+export function formatLabelDate(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(d);
+}

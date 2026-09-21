@@ -8,6 +8,7 @@ export async function GET() {
     ghlLocationId: settings.ghlLocationId ?? "",
     metaAccessToken: maskSecret(settings.metaAccessToken),
     metaAdAccountId: settings.metaAdAccountId ?? "",
+    reportingTimezone: settings.reportingTimezone,
     alertThresholdPercent: Number(settings.alertThresholdPercent),
     alertEmail: settings.alertEmail ?? "",
     lastGhlSyncAt: settings.lastGhlSyncAt,
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
     ghlLocationId: typeof body.ghlLocationId === "string" ? body.ghlLocationId.trim() : undefined,
     metaAccessToken: typeof body.metaAccessToken === "string" ? body.metaAccessToken.trim() : undefined,
     metaAdAccountId: typeof body.metaAdAccountId === "string" ? body.metaAdAccountId.trim() : undefined,
+    reportingTimezone: typeof body.reportingTimezone === "string" ? body.reportingTimezone.trim() : undefined,
     alertEmail: typeof body.alertEmail === "string" ? body.alertEmail.trim() : undefined,
     alertThresholdPercent: threshold,
   });

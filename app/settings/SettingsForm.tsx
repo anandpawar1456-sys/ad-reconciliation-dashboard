@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { COMMON_TIMEZONES } from "@/lib/timezone";
 
 type InitialSettings = {
   ghlApiKeyMasked: string;
   ghlLocationId: string;
   metaAccessTokenMasked: string;
   metaAdAccountId: string;
+  reportingTimezone: string;
   alertThresholdPercent: number;
   alertEmail: string;
 };
@@ -16,6 +18,7 @@ export default function SettingsForm({ initial }: { initial: InitialSettings }) 
   const [ghlLocationId, setGhlLocationId] = useState(initial.ghlLocationId);
   const [metaAccessToken, setMetaAccessToken] = useState("");
   const [metaAdAccountId, setMetaAdAccountId] = useState(initial.metaAdAccountId);
+  const [reportingTimezone, setReportingTimezone] = useState(initial.reportingTimezone);
   const [alertThresholdPercent, setAlertThresholdPercent] = useState(
     String(initial.alertThresholdPercent)
   );
@@ -34,6 +37,7 @@ export default function SettingsForm({ initial }: { initial: InitialSettings }) 
         ghlLocationId,
         metaAccessToken: metaAccessToken || undefined,
         metaAdAccountId,
+        reportingTimezone,
         alertThresholdPercent,
         alertEmail,
       }),
@@ -95,6 +99,25 @@ export default function SettingsForm({ initial }: { initial: InitialSettings }) 
             onChange={(e) => setMetaAdAccountId(e.target.value)}
             className="field-input"
           />
+        </Field>
+      </Section>
+
+      <Section title="Reporting Timezone" accent="from-emerald-400 to-teal-500">
+        <Field
+          label="Timezone"
+          hint="Must match the timezone your Meta ad account reports in, or GHL revenue and Meta revenue will land on different calendar days."
+        >
+          <select
+            value={reportingTimezone}
+            onChange={(e) => setReportingTimezone(e.target.value)}
+            className="field-input"
+          >
+            {COMMON_TIMEZONES.map((tz) => (
+              <option key={tz.value} value={tz.value}>
+                {tz.label}
+              </option>
+            ))}
+          </select>
         </Field>
       </Section>
 

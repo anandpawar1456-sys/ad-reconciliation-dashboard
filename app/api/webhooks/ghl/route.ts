@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getGhlContact, extractAttribution } from "@/lib/ghl";
 import { getSettings } from "@/lib/settings";
 import { computeDailyRollup } from "@/lib/rollup";
+import { toLocalDateLabel, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
 function pick(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -103,8 +104,10 @@ export async function POST(req: NextRequest) {
 
   // Recompute today's (well, this order's day's) numbers immediately so
   // sales show up on the dashboard in real time, independent of the hourly
-  // Meta sync cadence.
-  await computeDailyRollup(order.occurredAt);
+  // Meta sync cadence. Bucketed by the account's reporting timezone so it
+  // lines up with which day Meta itself credits this to.
+  const timeZone = settings.reportingTimezone || DEFAULT_TIMEZONE;
+  await computeDailyRollup(toLocalDateLabel(order.occurredAt, timeZone));
 
   return NextResponse.json({ ok: true });
 }

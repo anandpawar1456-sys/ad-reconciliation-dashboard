@@ -4,6 +4,7 @@ import { getSettings } from "@/lib/settings";
 import { fetchMetaInsights } from "@/lib/meta";
 import { isAuthorizedCron } from "@/lib/cronAuth";
 import { computeRollupRange } from "@/lib/rollup";
+import { toLocalDateLabel, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -23,8 +24,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, reason: "Meta not configured" });
   }
 
-  const until = formatDate(new Date());
-  const since = formatDate(new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000));
+  const timeZone = settings.reportingTimezone || DEFAULT_TIMEZONE;
+  const todayLabel = toLocalDateLabel(new Date(), timeZone);
+  const sinceLabel = new Date(todayLabel.getTime() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const until = formatDate(todayLabel);
+  const since = formatDate(sinceLabel);
 
   const rows = await fetchMetaInsights({
     accessToken: settings.metaAccessToken,

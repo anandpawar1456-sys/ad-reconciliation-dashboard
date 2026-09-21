@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isAuthorizedCron } from "@/lib/cronAuth";
 import { getSettings } from "@/lib/settings";
 import { sendGapAlertEmail } from "@/lib/email";
-import { formatDate } from "@/lib/format";
+import { formatLabelDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
   await sendGapAlertEmail({
     to: settings.alertEmail,
-    date: formatDate(latest.date),
+    date: formatLabelDate(latest.date),
     ghlRevenue: Number(latest.ghlRevenue),
     metaRevenue: Number(latest.metaRevenue),
     gapAmount: Number(latest.gapAmount),
