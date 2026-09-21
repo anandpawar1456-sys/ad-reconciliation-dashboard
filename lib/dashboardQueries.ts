@@ -37,9 +37,9 @@ export type AdAttributionTotal = {
 // Sums AdAttribution rows across the window per ad, then recomputes ratios
 // from the sums (rather than averaging daily ratios, which would skew
 // low-spend days too heavily).
-export async function getAdAttributionTotals(days: number): Promise<AdAttributionTotal[]> {
-  const since = daysAgo(days);
-  const rows = await prisma.adAttribution.findMany({ where: { date: { gte: since } } });
+export async function getAdAttributionTotals(since: Date, until: Date): Promise<AdAttributionTotal[]> {
+  const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
+  const rows = await prisma.adAttribution.findMany({ where: { date: { gte: since, lt: untilExclusive } } });
 
   const byAd = new Map<string, AdAttributionTotal>();
   for (const row of rows) {
@@ -81,10 +81,10 @@ export type FunnelStageTotal = {
   transactions: number;
 };
 
-export async function getFunnelBreakdown(days: number): Promise<FunnelStageTotal[]> {
-  const since = daysAgo(days);
+export async function getFunnelBreakdown(since: Date, until: Date): Promise<FunnelStageTotal[]> {
+  const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: since }, status: { in: ["completed"] } },
+    where: { occurredAt: { gte: since, lt: untilExclusive }, status: { in: ["completed"] } },
     select: { funnelStage: true, amount: true },
   });
 

@@ -5,6 +5,7 @@ export const RANGE_PRESETS = [
   { value: "yesterday", label: "Yesterday" },
   { value: "last3", label: "Last 3 Days" },
   { value: "last7", label: "Last 7 Days" },
+  { value: "last30", label: "Last 30 Days" },
   { value: "thisMonth", label: "This Month" },
   { value: "lastMonth", label: "Last Month" },
   { value: "lastYear", label: "Last Year" },
@@ -42,6 +43,8 @@ export function resolveRange(
       return { since: addDays(today, -2), until: today, label: presetLabel };
     case "last7":
       return { since: addDays(today, -6), until: today, label: presetLabel };
+    case "last30":
+      return { since: addDays(today, -29), until: today, label: presetLabel };
     case "thisMonth":
       return { since: startOfMonth(today), until: today, label: presetLabel };
     case "lastMonth": {

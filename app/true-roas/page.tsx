@@ -1,21 +1,41 @@
 import NavBar from "../dashboard/NavBar";
-import { getAdAttributionTotals } from "@/lib/dashboardQueries";
+import DateRangePicker from "../dashboard/DateRangePicker";
+import { getAdAttributionTotals, getEarliestDataDate } from "@/lib/dashboardQueries";
+import { getSettings } from "@/lib/settings";
+import { resolveRange, type RangePreset } from "@/lib/dateRanges";
+import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { formatCurrency, formatRoas } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function TrueRoasPage() {
-  const ads = await getAdAttributionTotals(30);
+export default async function TrueRoasPage({
+  searchParams,
+}: {
+  searchParams: { range?: string; since?: string; until?: string };
+}) {
+  const settings = await getSettings();
+  const timeZone = settings.reportingTimezone || DEFAULT_TIMEZONE;
+  const earliestDataDate = (await getEarliestDataDate()) ?? new Date();
+
+  const preset = (searchParams.range ?? "last30") as RangePreset;
+  const resolved = resolveRange(preset, timeZone, earliestDataDate, searchParams.since, searchParams.until);
+
+  const ads = await getAdAttributionTotals(resolved.since, resolved.until);
 
   return (
     <div>
       <NavBar />
       <main className="mx-auto max-w-6xl px-6 py-14">
-        <h1 className="text-3xl font-extrabold tracking-tight text-ink-900">True ROAS</h1>
-        <p className="mt-2 text-ink-400">
-          Meta&apos;s reported ROAS next to a corrected true ROAS that adds in GHL revenue
-          confirmed for that ad but missing from Meta&apos;s own reporting. Last 30 days.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-ink-900">True ROAS</h1>
+            <p className="mt-2 text-ink-400">
+              Meta&apos;s reported ROAS next to a corrected true ROAS that adds in GHL revenue
+              confirmed for that ad but missing from Meta&apos;s own reporting. {resolved.label}.
+            </p>
+          </div>
+          <DateRangePicker currentPreset={preset} currentLabel={resolved.label} basePath="/true-roas" />
+        </div>
 
         <div className="mt-8 section-card overflow-x-auto">
           {ads.length === 0 ? (

@@ -1,23 +1,43 @@
 import NavBar from "../dashboard/NavBar";
-import { getFunnelBreakdown } from "@/lib/dashboardQueries";
+import DateRangePicker from "../dashboard/DateRangePicker";
+import { getFunnelBreakdown, getEarliestDataDate } from "@/lib/dashboardQueries";
+import { getSettings } from "@/lib/settings";
+import { resolveRange, type RangePreset } from "@/lib/dateRanges";
+import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { formatCurrency } from "@/lib/format";
 import { FUNNEL_STAGE_LABELS, type FunnelStage } from "@/lib/funnelStages";
 
 export const dynamic = "force-dynamic";
 
-export default async function FunnelPage() {
-  const stages = await getFunnelBreakdown(30);
+export default async function FunnelPage({
+  searchParams,
+}: {
+  searchParams: { range?: string; since?: string; until?: string };
+}) {
+  const settings = await getSettings();
+  const timeZone = settings.reportingTimezone || DEFAULT_TIMEZONE;
+  const earliestDataDate = (await getEarliestDataDate()) ?? new Date();
+
+  const preset = (searchParams.range ?? "last30") as RangePreset;
+  const resolved = resolveRange(preset, timeZone, earliestDataDate, searchParams.since, searchParams.until);
+
+  const stages = await getFunnelBreakdown(resolved.since, resolved.until);
   const totalRevenue = stages.reduce((sum, s) => sum + s.revenue, 0);
 
   return (
     <div>
       <NavBar />
       <main className="mx-auto max-w-4xl px-6 py-14">
-        <h1 className="text-3xl font-extrabold tracking-tight text-ink-900">Funnel Breakdown</h1>
-        <p className="mt-2 text-ink-400">
-          Revenue and transactions by funnel stage, last 30 days. Orders show as &quot;Unknown&quot;
-          until their GHL product id is mapped to a stage in Settings.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-ink-900">Funnel Breakdown</h1>
+            <p className="mt-2 text-ink-400">
+              Revenue and transactions by funnel stage, {resolved.label.toLowerCase()}. Orders show as
+              &quot;Unknown&quot; until their GHL product id is mapped to a stage in Settings.
+            </p>
+          </div>
+          <DateRangePicker currentPreset={preset} currentLabel={resolved.label} basePath="/funnel" />
+        </div>
 
         <div className="mt-8 space-y-3">
           {stages.length === 0 ? (

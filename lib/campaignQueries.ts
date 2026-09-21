@@ -58,13 +58,10 @@ async function getHierarchySummaries(
   const byId = new Map<string, HierarchySummary>();
   const freqSums = new Map<string, { sum: number; count: number }>();
 
-  for (const row of insightRows) {
-    const id = (row as unknown as Record<string, string | null>)[idField];
-    if (!id) continue;
-
-    const existing = byId.get(id) ?? {
+  function blankSummary(id: string, name: string): HierarchySummary {
+    return {
       id,
-      name: statusById.get(id)?.name ?? (level === "campaign" ? row.campaignName : level === "adset" ? row.adsetName : row.adName) ?? id,
+      name,
       status: statusById.get(id)?.status ?? "UNKNOWN",
       effectiveStatus: statusById.get(id)?.effectiveStatus ?? "UNKNOWN",
       spend: 0,
@@ -83,6 +80,23 @@ async function getHierarchySummaries(
       ctr: 0,
       frequency: 0,
     };
+  }
+
+  // Seed every known entity (from the Meta*/status table) with a zeroed
+  // row first, so a campaign/ad set/ad with no activity in the selected
+  // range still shows up — the full list should always be there, only the
+  // numbers should change with the date range, not which rows exist.
+  for (const status of statusRows) {
+    byId.set(status.id, blankSummary(status.id, status.name));
+  }
+
+  for (const row of insightRows) {
+    const id = (row as unknown as Record<string, string | null>)[idField];
+    if (!id) continue;
+
+    const existing =
+      byId.get(id) ??
+      blankSummary(id, (level === "campaign" ? row.campaignName : level === "adset" ? row.adsetName : row.adName) ?? id);
     existing.spend += Number(row.spend);
     existing.metaRevenue += Number(row.purchaseValue);
     existing.purchases += row.purchases;
