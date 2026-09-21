@@ -79,6 +79,7 @@ export async function syncMetaInsights(since: string, until: string): Promise<Me
         ctr: row.ctr,
         frequency: row.frequency,
         reach: row.reach,
+        uniqueLinkClicks: row.uniqueLinkClicks,
         rawPayload: row as unknown as object,
       },
       update: {
@@ -94,6 +95,7 @@ export async function syncMetaInsights(since: string, until: string): Promise<Me
         ctr: row.ctr,
         frequency: row.frequency,
         reach: row.reach,
+        uniqueLinkClicks: row.uniqueLinkClicks,
         rawPayload: row as unknown as object,
       },
     });

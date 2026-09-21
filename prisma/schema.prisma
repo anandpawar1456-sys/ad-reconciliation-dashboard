@@ -126,6 +126,7 @@ model MetaInsight {
   ctr           Decimal  @db.Decimal(8, 4) @default(0)
   frequency     Decimal  @db.Decimal(8, 4) @default(0)
   reach         Int      @default(0)
+  uniqueLinkClicks Int   @default(0)
   rawPayload    Json?
   createdAt     DateTime @default(now())
 

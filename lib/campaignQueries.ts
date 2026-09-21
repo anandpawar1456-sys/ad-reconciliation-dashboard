@@ -12,10 +12,12 @@ export type HierarchySummary = {
   trueRoas: number | null;
   recoveredRevenue: number;
   ghlRevenue: number;
-  profit: number; // ghlRevenue - spend: the real, GHL-verified profit/loss
+  ghlProfit: number; // ghlRevenue - spend: the real, GHL-verified profit/loss
+  metaProfit: number; // metaRevenue - spend: what Meta's own numbers claim — often wrong
   purchases: number;
   impressions: number;
   clicks: number;
+  uniqueLinkClicks: number;
   ctr: number;
   frequency: number;
 };
@@ -72,10 +74,12 @@ async function getHierarchySummaries(
       trueRoas: null,
       recoveredRevenue: 0,
       ghlRevenue: 0,
-      profit: 0,
+      ghlProfit: 0,
+      metaProfit: 0,
       purchases: 0,
       impressions: 0,
       clicks: 0,
+      uniqueLinkClicks: 0,
       ctr: 0,
       frequency: 0,
     };
@@ -84,6 +88,7 @@ async function getHierarchySummaries(
     existing.purchases += row.purchases;
     existing.impressions += row.impressions;
     existing.clicks += row.clicks;
+    existing.uniqueLinkClicks += row.uniqueLinkClicks;
     byId.set(id, existing);
 
     const f = freqSums.get(id) ?? { sum: 0, count: 0 };
@@ -135,7 +140,8 @@ async function getHierarchySummaries(
       recoveredRevenue,
       trueRevenue,
       ghlRevenue,
-      profit: ghlRevenue - c.spend,
+      ghlProfit: ghlRevenue - c.spend,
+      metaProfit: c.metaRevenue - c.spend,
       metaRoas: c.spend > 0 ? c.metaRevenue / c.spend : null,
       trueRoas: c.spend > 0 ? trueRevenue / c.spend : null,
       ctr: c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0,

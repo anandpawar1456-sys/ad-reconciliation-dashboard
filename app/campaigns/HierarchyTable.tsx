@@ -20,13 +20,15 @@ export default function HierarchyTable({
       acc.spend += r.spend;
       acc.metaRevenue += r.metaRevenue;
       acc.trueRevenue += r.trueRevenue;
-      acc.profit += r.profit;
+      acc.ghlProfit += r.ghlProfit;
+      acc.metaProfit += r.metaProfit;
       acc.purchases += r.purchases;
       acc.impressions += r.impressions;
       acc.clicks += r.clicks;
+      acc.uniqueLinkClicks += r.uniqueLinkClicks;
       return acc;
     },
-    { spend: 0, metaRevenue: 0, trueRevenue: 0, profit: 0, purchases: 0, impressions: 0, clicks: 0 }
+    { spend: 0, metaRevenue: 0, trueRevenue: 0, ghlProfit: 0, metaProfit: 0, purchases: 0, impressions: 0, clicks: 0, uniqueLinkClicks: 0 }
   );
   const totalMetaRoas = totals.spend > 0 ? totals.metaRevenue / totals.spend : null;
   const totalTrueRoas = totals.spend > 0 ? totals.trueRevenue / totals.spend : null;
@@ -37,7 +39,7 @@ export default function HierarchyTable({
   }
 
   return (
-    <table className="w-full min-w-[920px] text-sm">
+    <table className="w-full min-w-[1180px] text-sm">
       <thead>
         <tr className="border-b border-ink-900/10 text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
           <th className="py-3 pr-4">{nameLabel}</th>
@@ -45,9 +47,11 @@ export default function HierarchyTable({
           <th className="py-3 pr-4">Spend</th>
           <th className="py-3 pr-4">Meta ROAS</th>
           <th className="py-3 pr-4">True ROAS</th>
-          <th className="py-3 pr-4">Profit / Loss</th>
+          <th className="py-3 pr-4">GHL P/L</th>
+          <th className="py-3 pr-4">Meta P/L</th>
           <th className="py-3 pr-4">CTR</th>
-          <th className="py-3">Purchases</th>
+          <th className="py-3 pr-4">Purchases</th>
+          <th className="py-3">Unique Link Clicks</th>
         </tr>
       </thead>
       <tbody>
@@ -70,12 +74,17 @@ export default function HierarchyTable({
             <td className={`py-3 pr-4 font-semibold ${r.recoveredRevenue > 0 ? "text-emerald-500" : "text-ink-900"}`}>
               {formatRoas(r.trueRoas)}
             </td>
-            <td className={`py-3 pr-4 font-semibold ${r.profit >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
-              {r.profit >= 0 ? "+" : "−"}
-              {formatCurrency(Math.abs(r.profit))}
+            <td className={`py-3 pr-4 font-semibold ${r.ghlProfit >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+              {r.ghlProfit >= 0 ? "+" : "−"}
+              {formatCurrency(Math.abs(r.ghlProfit))}
+            </td>
+            <td className={`py-3 pr-4 ${r.metaProfit >= 0 ? "text-emerald-500/70" : "text-rose-500/70"}`}>
+              {r.metaProfit >= 0 ? "+" : "−"}
+              {formatCurrency(Math.abs(r.metaProfit))}
             </td>
             <td className="py-3 pr-4 text-ink-700">{r.ctr.toFixed(2)}%</td>
-            <td className="py-3 text-ink-700">{r.purchases}</td>
+            <td className="py-3 pr-4 text-ink-700">{r.purchases}</td>
+            <td className="py-3 text-ink-700">{r.uniqueLinkClicks.toLocaleString()}</td>
           </tr>
         ))}
       </tbody>
@@ -86,12 +95,17 @@ export default function HierarchyTable({
           <td className="py-3 pr-4 text-ink-900">{formatCurrency(totals.spend)}</td>
           <td className="py-3 pr-4 text-ink-900">{formatRoas(totalMetaRoas)}</td>
           <td className="py-3 pr-4 text-ink-900">{formatRoas(totalTrueRoas)}</td>
-          <td className={`py-3 pr-4 ${totals.profit >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
-            {totals.profit >= 0 ? "+" : "−"}
-            {formatCurrency(Math.abs(totals.profit))}
+          <td className={`py-3 pr-4 ${totals.ghlProfit >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+            {totals.ghlProfit >= 0 ? "+" : "−"}
+            {formatCurrency(Math.abs(totals.ghlProfit))}
+          </td>
+          <td className={`py-3 pr-4 ${totals.metaProfit >= 0 ? "text-emerald-500/70" : "text-rose-500/70"}`}>
+            {totals.metaProfit >= 0 ? "+" : "−"}
+            {formatCurrency(Math.abs(totals.metaProfit))}
           </td>
           <td className="py-3 pr-4 text-ink-900">{totalCtr.toFixed(2)}%</td>
-          <td className="py-3 text-ink-900">{totals.purchases}</td>
+          <td className="py-3 pr-4 text-ink-900">{totals.purchases}</td>
+          <td className="py-3 text-ink-900">{totals.uniqueLinkClicks.toLocaleString()}</td>
         </tr>
       </tfoot>
     </table>

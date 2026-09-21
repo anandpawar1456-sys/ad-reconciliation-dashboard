@@ -29,6 +29,7 @@ export type MetaInsightRow = {
   ctr: number; // percent, as Meta reports it
   frequency: number;
   reach: number;
+  uniqueLinkClicks: number;
 };
 
 export async function fetchMetaInsights(params: {
@@ -58,6 +59,7 @@ export async function fetchMetaInsights(params: {
     "ctr",
     "frequency",
     "reach",
+    "unique_inline_link_clicks",
   ].join(",");
 
   const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${adAccountId}/insights`);
@@ -96,6 +98,7 @@ export async function fetchMetaInsights(params: {
         ctr: Number(item.ctr ?? 0),
         frequency: Number(item.frequency ?? 0),
         reach: Number(item.reach ?? 0),
+        uniqueLinkClicks: Number(item.unique_inline_link_clicks ?? 0),
       });
     }
 
