@@ -79,7 +79,7 @@ export type FunnelStageTotal = {
 export async function getFunnelBreakdown(days: number): Promise<FunnelStageTotal[]> {
   const since = daysAgo(days);
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: since }, status: { notIn: ["refunded", "void", "cancelled"] } },
+    where: { occurredAt: { gte: since }, status: { in: ["completed"] } },
     select: { funnelStage: true, amount: true },
   });
 

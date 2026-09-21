@@ -67,3 +67,63 @@ function parseQueryParams(url: string | undefined): Record<string, string> {
     return {};
   }
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type GhlOrderRow = {
+  id: string;
+  contactId: string;
+  amount: number;
+  currency: string;
+  status: string; // observed values: "completed" (paid), "pending" (unpaid)
+  createdAt: string;
+  sourceType?: string;
+  sourceSubType?: string; // observed: "upsell", "one_step_order_form"
+  sourceName?: string;
+  sourceStepId?: string;
+  sourcePageId?: string;
+  raw: unknown;
+};
+
+// GET /payments/orders. Confirmed against the real account: offset-based
+// pagination works (?offset=N), the response includes totalCount, and
+// there's no line-item detail in the list view — just counts
+// (totalProducts). Newest orders come first.
+export async function listGhlOrders(
+  apiKey: string,
+  locationId: string,
+  params: { limit: number; offset: number }
+): Promise<{ data: GhlOrderRow[]; totalCount: number }> {
+  const url = new URL(`${GHL_API_BASE}/payments/orders`);
+  url.searchParams.set("altId", locationId);
+  url.searchParams.set("altType", "location");
+  url.searchParams.set("limit", String(params.limit));
+  url.searchParams.set("offset", String(params.offset));
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${apiKey}`, Version: GHL_API_VERSION },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error(`GHL orders fetch failed (${res.status}): ${await res.text()}`);
+  }
+
+  const json = await res.json();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: GhlOrderRow[] = (json.data ?? []).map((o: any) => ({
+    id: o._id,
+    contactId: o.contactId,
+    amount: Number(o.amount ?? 0),
+    currency: o.currency ?? "USD",
+    status: o.status,
+    createdAt: o.createdAt,
+    sourceType: o.sourceType,
+    sourceSubType: o.sourceSubType,
+    sourceName: o.sourceName,
+    sourceStepId: o.sourceMeta?.stepId,
+    sourcePageId: o.sourceMeta?.pageId,
+    raw: o,
+  }));
+
+  return { data, totalCount: json.totalCount ?? 0 };
+}

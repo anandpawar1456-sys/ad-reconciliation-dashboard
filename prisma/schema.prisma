@@ -73,22 +73,33 @@ model ClickEvent {
   @@index([adId])
 }
 
-// A single GHL order / transaction / opportunity-won event.
+// A single GHL order, pulled via polling GET /payments/orders (not a
+// webhook — see lib/ghl.ts syncGhlOrders and app/api/cron/ghl-sync).
 model GhlOrder {
-  id           String     @id // GHL transaction/order id
-  contactId    String
-  contact      GhlContact @relation(fields: [contactId], references: [id])
-  amount       Decimal    @db.Decimal(12, 2)
-  currency     String     @default("USD")
-  productId    String?
-  productName  String?
+  id            String     @id // GHL order _id
+  contactId     String
+  contact       GhlContact @relation(fields: [contactId], references: [id])
+  amount        Decimal    @db.Decimal(12, 2)
+  currency      String     @default("USD")
+  productId     String?
+  productName   String?
+  // Raw signal from GHL's order.sourceSubType/sourceName/sourceMeta —
+  // e.g. "upsell", "one_step_order_form". Not yet mapped to our fixed
+  // FRONT_END/ORDER_BUMP_*/UPSELL_* buckets since GHL doesn't say which
+  // numbered upsell/bump a step is — mapping that precisely needs the
+  // step IDs confirmed against the real funnel first.
+  sourceType    String?
+  sourceSubType String?
+  sourceName    String?
+  sourceStepId  String?
+  sourcePageId  String?
   // FRONT_END | ORDER_BUMP_1 | ORDER_BUMP_2 | UPSELL_1 | UPSELL_2 | UPSELL_3 | UNKNOWN
-  funnelStage  String     @default("UNKNOWN")
-  status       String // e.g. paid, refunded, void
-  occurredAt   DateTime // actual transaction time, used for day bucketing
-  rawPayload   Json? // full webhook payload, kept for re-processing/debugging
-  createdAt    DateTime   @default(now())
-  unmatched    UnmatchedTransaction?
+  funnelStage   String     @default("UNKNOWN")
+  status        String // GHL order.status, e.g. completed, refunded, void
+  occurredAt    DateTime // GHL order.createdAt, used for day bucketing
+  rawPayload    Json? // full order payload, kept for re-processing/debugging
+  createdAt     DateTime   @default(now())
+  unmatched     UnmatchedTransaction?
 
   @@index([occurredAt])
   @@index([contactId])

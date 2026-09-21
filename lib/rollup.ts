@@ -3,8 +3,13 @@ import type { GhlOrder, GhlContact, MetaInsight } from "@prisma/client";
 import { getSettings } from "@/lib/settings";
 import { getUtcDayRange, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
-// Orders in these statuses don't count as real revenue.
-const EXCLUDED_STATUSES = ["refunded", "void", "cancelled"];
+// Only orders in these statuses count as real revenue. Confirmed against
+// this account's actual order history (1564 orders sampled): GHL's
+// payments/orders API only ever returns "completed" (paid) or "pending"
+// (unpaid, e.g. a failed/incomplete checkout) — there's no separate
+// "refunded"/"void" status observed on the order itself. Revisit if GHL
+// starts returning other values.
+const COUNTED_STATUSES = ["completed"];
 
 // Recomputes DailyReconciliation and AdAttribution for a single day from
 // raw GhlOrder/GhlContact/MetaInsight rows. `labelDate` must already be a
@@ -20,7 +25,7 @@ export async function computeDailyRollup(labelDate: Date): Promise<void> {
   const { start, end } = getUtcDayRange(labelDate, timeZone);
 
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: start, lt: end }, status: { notIn: EXCLUDED_STATUSES } },
+    where: { occurredAt: { gte: start, lt: end }, status: { in: COUNTED_STATUSES } },
     include: { contact: true },
   });
 
