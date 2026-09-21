@@ -2,9 +2,7 @@ const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const GHL_API_VERSION = "2021-07-28";
 
 // Minimal shape of what we read off a GHL contact — the real object has
-// many more fields. `any` is intentional here: GHL's attribution field
-// names have shifted across API versions and aren't worth hard-typing
-// until we've seen a real payload.
+// many more fields we don't use.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getGhlContact(contactId: string, apiKey: string): Promise<any> {
   const res = await fetch(`${GHL_API_BASE}/contacts/${contactId}`, {
@@ -30,23 +28,42 @@ export type GhlAttribution = {
   utmCampaign?: string;
   utmContent?: string;
   utmTerm?: string;
+  adId?: string;
+  adsetId?: string;
+  campaignId?: string;
 };
 
-// GHL exposes attribution on the contact as `attributionSource` (their
-// built-in click/UTM capture, separate from our own tracking script). Exact
-// key spelling has changed across GHL API versions, so this reads several
-// possible variants defensively. VERIFY against a real contact payload
-// once the API key is live (log `contact` in the webhook handler once) and
-// adjust the key names here if GHL's actual response differs.
+// Verified against a real GET /contacts/{id} response (2026-09-21):
+// GHL's own click capture lands on the contact as `attributionSource`
+// (first touch) and `lastAttributionSource` (most recent touch — used
+// here, matching our last-click default model). It gives fbclid, UTM
+// fields, and a direct Meta `adId`, but has no adset/campaign id fields of
+// its own — those come through as `adset_id` and `utm_id` (mapped from
+// Meta's {{campaign.id}}) query params on the captured landing URL instead,
+// so we parse them out of `url`.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractAttribution(contact: any): GhlAttribution {
-  const src = contact?.attributionSource ?? contact?.lastAttributionSource ?? {};
+  const source = contact?.lastAttributionSource ?? contact?.attributionSource ?? {};
+  const urlParams = parseQueryParams(source.url);
+
   return {
-    fbclid: src.fbclid ?? contact?.fbclid ?? undefined,
-    utmSource: src.utmSource ?? src.source ?? undefined,
-    utmMedium: src.utmMedium ?? src.medium ?? undefined,
-    utmCampaign: src.utmCampaign ?? src.campaign ?? undefined,
-    utmContent: src.utmContent ?? undefined,
-    utmTerm: src.utmTerm ?? undefined,
+    fbclid: source.fbclid ?? urlParams.fbclid,
+    utmSource: source.utmSource,
+    utmMedium: source.utmMedium,
+    utmCampaign: source.campaign,
+    utmContent: source.utmContent,
+    utmTerm: source.utmTerm,
+    adId: source.adId ?? urlParams.ad_id,
+    adsetId: urlParams.adset_id,
+    campaignId: urlParams.utm_id ?? urlParams.campaign_id,
   };
+}
+
+function parseQueryParams(url: string | undefined): Record<string, string> {
+  if (!url) return {};
+  try {
+    return Object.fromEntries(new URL(url).searchParams.entries());
+  } catch {
+    return {};
+  }
 }
