@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { fetchMetaInsights } from "@/lib/meta";
 import { isAuthorizedCron } from "@/lib/cronAuth";
+import { computeRollupRange } from "@/lib/rollup";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -80,7 +81,9 @@ export async function GET(req: NextRequest) {
     data: { lastMetaSyncAt: new Date() },
   });
 
-  return NextResponse.json({ ok: true, rows: rows.length, since, until });
+  const days = await computeRollupRange(new Date(since), new Date(until));
+
+  return NextResponse.json({ ok: true, rows: rows.length, since, until, rollupDays: days });
 }
 
 function formatDate(d: Date): string {

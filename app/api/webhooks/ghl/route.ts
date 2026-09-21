@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getGhlContact, extractAttribution } from "@/lib/ghl";
 import { getSettings } from "@/lib/settings";
+import { computeDailyRollup } from "@/lib/rollup";
 
 function pick(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
     update: { email, phone, ...attribution },
   });
 
-  await prisma.ghlOrder.upsert({
+  const order = await prisma.ghlOrder.upsert({
     where: { id: orderId },
     create: {
       id: orderId,
@@ -99,6 +100,11 @@ export async function POST(req: NextRequest) {
     where: { id: 1 },
     data: { lastGhlSyncAt: new Date() },
   });
+
+  // Recompute today's (well, this order's day's) numbers immediately so
+  // sales show up on the dashboard in real time, independent of the hourly
+  // Meta sync cadence.
+  await computeDailyRollup(order.occurredAt);
 
   return NextResponse.json({ ok: true });
 }
