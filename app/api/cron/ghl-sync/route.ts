@@ -9,16 +9,22 @@ export const maxDuration = 60;
 // (that action is billed per-execution on this account's plan). Default
 // call covers the most recent 100 orders — plenty of headroom between
 // polls at this account's volume. Pass ?pages=N to pull further back (e.g.
-// for a one-time historical backfill); each page is 100 orders.
+// for a one-time historical backfill) and ?startPage=N to resume a backfill
+// across multiple calls without re-fetching pages already done (each page
+// is 100 orders, offset = (startPage + i) * 100).
 export async function GET(req: NextRequest) {
   if (!isAuthorizedCron(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const pages = Number(req.nextUrl.searchParams.get("pages") ?? "1");
+  const startPage = Number(req.nextUrl.searchParams.get("startPage") ?? "0");
 
   try {
-    const result = await syncGhlOrders({ pages: Number.isFinite(pages) && pages > 0 ? pages : 1 });
+    const result = await syncGhlOrders({
+      pages: Number.isFinite(pages) && pages > 0 ? pages : 1,
+      startPage: Number.isFinite(startPage) && startPage >= 0 ? startPage : 0,
+    });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });

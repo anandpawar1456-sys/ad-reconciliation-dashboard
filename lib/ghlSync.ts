@@ -29,7 +29,7 @@ export type GhlSyncResult = {
 // account's volume comfortably covers the gap between polls; pass more
 // pages for a historical backfill.
 export async function syncGhlOrders(
-  options: { pages?: number; pageSize?: number } = {}
+  options: { pages?: number; pageSize?: number; startPage?: number } = {}
 ): Promise<GhlSyncResult> {
   const settings = await getSettings();
   if (!settings.ghlApiKey || !settings.ghlLocationId) {
@@ -38,6 +38,7 @@ export async function syncGhlOrders(
 
   const pageSize = options.pageSize ?? 100;
   const pages = options.pages ?? 1;
+  const startPage = options.startPage ?? 0;
   const timeZone = settings.reportingTimezone || DEFAULT_TIMEZONE;
 
   let ordersSeen = 0;
@@ -45,7 +46,7 @@ export async function syncGhlOrders(
   const touchedDays = new Set<string>();
   const knownContacts = new Set<string>();
 
-  for (let page = 0; page < pages; page++) {
+  for (let page = startPage; page < startPage + pages; page++) {
     const { data } = await listGhlOrders(settings.ghlApiKey, settings.ghlLocationId, {
       limit: pageSize,
       offset: page * pageSize,
