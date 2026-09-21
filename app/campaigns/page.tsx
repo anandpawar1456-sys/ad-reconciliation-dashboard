@@ -82,7 +82,8 @@ export default async function CampaignsPage({
           <HierarchyTable
             rows={filtered}
             nameLabel="Campaign"
-            linkFor={(id) => `/campaigns/${id}?${new URLSearchParams(dateParams).toString()}`}
+            linkBase="/campaigns"
+            linkQuery={new URLSearchParams(dateParams).toString()}
           />
         </div>
       </main>

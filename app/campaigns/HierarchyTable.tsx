@@ -17,12 +17,17 @@ import type { HierarchySummary } from "@/lib/campaignQueries";
 export default function HierarchyTable({
   rows,
   nameLabel,
-  linkFor,
+  linkBase,
+  linkQuery,
 }: {
   rows: HierarchySummary[];
   nameLabel: string;
-  linkFor?: (id: string) => string;
+  // Plain strings, not a function — Server Components can't pass functions
+  // to Client Components. href per row = `${linkBase}/${id}?${linkQuery}`.
+  linkBase?: string;
+  linkQuery?: string;
 }) {
+  const linkFor = linkBase ? (id: string) => `${linkBase}/${id}${linkQuery ? `?${linkQuery}` : ""}` : undefined;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filterToSelected, setFilterToSelected] = useState(false);
 
