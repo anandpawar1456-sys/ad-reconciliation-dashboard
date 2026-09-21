@@ -1,38 +1,57 @@
-import Link from "next/link";
-import LogoutButton from "./LogoutButton";
+import NavBar from "./NavBar";
 
 const UPCOMING_SECTIONS = [
-  { title: "Daily Reconciliation", detail: "GHL vs Meta revenue/transactions, gap $ and %." },
-  { title: "True ROAS", detail: "Reported vs corrected ROAS per ad/ad set/campaign." },
-  { title: "Funnel Breakdown", detail: "Revenue and transactions by funnel stage." },
-  { title: "Missing Transactions", detail: "GHL orders with no matching Meta purchase event." },
-  { title: "Settings", detail: "GHL/Meta API keys, alert threshold, product-to-funnel-stage mapping." },
+  {
+    title: "Daily Reconciliation",
+    detail: "GHL vs Meta revenue/transactions, gap $ and %.",
+    accent: "from-indigo-400 to-blue-500",
+  },
+  {
+    title: "True ROAS",
+    detail: "Reported vs corrected ROAS per ad/ad set/campaign.",
+    accent: "from-violet-400 to-purple-500",
+  },
+  {
+    title: "Funnel Breakdown",
+    detail: "Revenue and transactions by funnel stage.",
+    accent: "from-fuchsia-400 to-pink-500",
+  },
+  {
+    title: "Missing Transactions",
+    detail: "GHL orders with no matching Meta purchase event.",
+    accent: "from-rose-400 to-orange-500",
+  },
 ];
 
 export default function DashboardPage() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Ad Reconciliation Dashboard</h1>
-        <div className="flex items-center gap-4 text-sm">
-          <Link href="/settings" className="text-slate-400 hover:text-slate-200">
-            Settings
-          </Link>
-          <LogoutButton />
+    <div>
+      <NavBar />
+      <main className="mx-auto max-w-5xl px-6 py-14">
+        <h1 className="text-3xl font-extrabold tracking-tight text-ink-900">
+          Overview
+        </h1>
+        <p className="mt-2 text-ink-400">
+          Ingestion and the matching engine aren&apos;t live yet — these
+          panels will populate once GHL and Meta data start flowing in.
+        </p>
+
+        <div className="mt-10 grid gap-5 sm:grid-cols-2">
+          {UPCOMING_SECTIONS.map((section) => (
+            <div key={section.title} className="section-card group">
+              <div
+                className={`h-9 w-9 rounded-xl bg-gradient-to-br ${section.accent} shadow-sm transition group-hover:shadow-glow`}
+              />
+              <div className="mt-4 font-semibold text-ink-900">{section.title}</div>
+              <div className="mt-1 text-sm text-ink-400">{section.detail}</div>
+              <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-ink-900/5 px-2.5 py-1 text-xs font-medium text-ink-500">
+                <span className="h-1.5 w-1.5 rounded-full bg-ink-400" />
+                Waiting on data
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
-      <p className="mt-2 text-slate-400">
-        Project scaffold is up. Data pages below will fill in as ingestion and
-        the matching engine come online.
-      </p>
-      <ul className="mt-8 space-y-3">
-        {UPCOMING_SECTIONS.map((section) => (
-          <li key={section.title} className="rounded-lg border border-slate-800 p-4">
-            <div className="font-medium">{section.title}</div>
-            <div className="text-sm text-slate-400">{section.detail}</div>
-          </li>
-        ))}
-      </ul>
-    </main>
+      </main>
+    </div>
   );
 }

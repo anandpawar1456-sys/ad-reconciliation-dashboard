@@ -8,7 +8,8 @@ const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
   "/api/webhooks/ghl",
-  "/track",
+  "/api/track",
+  "/track.js",
 ];
 
 export async function middleware(req: NextRequest) {

@@ -1,3 +1,60 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: #1e1b2e;
+  background-color: #f8f7fc;
+  background-image:
+    radial-gradient(680px circle at 8% -5%, rgba(99, 102, 241, 0.16), transparent 60%),
+    radial-gradient(620px circle at 100% 0%, rgba(236, 72, 153, 0.14), transparent 55%),
+    radial-gradient(700px circle at 50% 110%, rgba(249, 115, 22, 0.10), transparent 55%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-3xl border border-white/60 bg-white/70 shadow-soft backdrop-blur-xl;
+  }
+
+  .glass-nav {
+    @apply border-b border-white/50 bg-white/60 backdrop-blur-xl;
+  }
+
+  .field-input {
+    @apply w-full rounded-2xl border border-ink-900/10 bg-white/80 px-4 py-2.5 text-sm text-ink-900
+      placeholder:text-ink-400 shadow-sm outline-none transition
+      focus:border-transparent focus:ring-2 focus:ring-violet-400/60 focus:shadow-glow;
+  }
+
+  .field-label {
+    @apply text-sm font-medium text-ink-700;
+  }
+
+  .field-hint {
+    @apply mt-1.5 block text-xs text-ink-400;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-2xl bg-aurora-blue px-5 py-2.5
+      text-sm font-semibold text-white shadow-glow transition
+      hover:brightness-110 hover:shadow-lg active:scale-[0.98]
+      disabled:opacity-50 disabled:hover:brightness-100;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-2xl border border-ink-900/10 bg-white/70
+      px-4 py-2 text-sm font-medium text-ink-700 shadow-sm transition
+      hover:bg-white hover:text-ink-900 active:scale-[0.98];
+  }
+
+  .section-card {
+    @apply rounded-3xl border border-white/60 bg-white/60 p-5 shadow-soft backdrop-blur-xl;
+  }
+}

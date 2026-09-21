@@ -1,10 +1,14 @@
 // Ad Reconciliation Dashboard — data model
 //
 // Data flow:
-//   1. Tracking script writes fbclid/UTM/ad ids onto a GHL contact's hidden
-//      form fields at opt-in time -> GhlContact.
-//   2. GHL order/opportunity webhooks + backfill create GhlOrder rows,
-//      linked to the contact that made the purchase.
+//   1. The tracking script (public/track.js) runs on every funnel page. It
+//      assigns/reads a first-party visitor id cookie, captures fbclid/UTM/
+//      ad ids from the URL, and POSTs them to /api/track -> ClickEvent. It
+//      also writes that same visitor id into a single GHL hidden field.
+//   2. GHL order/opportunity webhooks create GhlOrder rows, linked to a
+//      GhlContact. If the contact carries the visitor id hidden field, we
+//      look up ClickEvent by it and copy the attribution data onto
+//      GhlContact — no need for GHL to reliably capture 6+ separate fields.
 //   3. Meta Marketing API daily pull creates MetaInsight rows (spend,
 //      reported purchases/revenue) at campaign/adset/ad level.
 //   4. A rollup job joins GhlOrder -> GhlContact (for ad attribution) against
@@ -26,22 +30,46 @@ model GhlContact {
   id            String   @id // GHL contact id, used as-is (no surrogate key)
   email         String?
   phone         String?
+  visitorId     String? // from the "rcl_visitor_id" hidden field -> joins to ClickEvent
   fbclid        String?
   utmSource     String?
   utmMedium     String?
   utmCampaign   String?
   utmContent    String?
   utmTerm       String?
-  adId          String? // Meta ad id, parsed from utm_content/utm_term or a dedicated param
+  adId          String? // Meta ad id, copied from the matched ClickEvent
   adsetId       String?
   campaignId    String?
-  firstSeenAt   DateTime? // timestamp captured by the tracking script, not GHL's createdAt
+  firstSeenAt   DateTime? // ClickEvent.firstSeenAt for the matched visitor, not GHL's createdAt
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   orders        GhlOrder[]
 
   @@index([adId])
   @@index([email])
+  @@index([visitorId])
+}
+
+// One row per visitor, written by the tracking script. Last-touch: a
+// returning visitor's later click overwrites the ad/UTM fields here, so
+// attribution reflects whichever ad most recently drove them back.
+model ClickEvent {
+  visitorId    String   @id
+  fbclid       String?
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  utmContent   String?
+  utmTerm      String?
+  adId         String?
+  adsetId      String?
+  campaignId   String?
+  landingUrl   String?
+  referrer     String?
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @updatedAt
+
+  @@index([adId])
 }
 
 // A single GHL order / transaction / opportunity-won event.
