@@ -161,3 +161,64 @@ export async function fetchMetaCampaigns(params: {
 
   return rows;
 }
+
+export type MetaAdSetRow = { id: string; name: string; campaignId: string; status: string; effectiveStatus: string };
+export type MetaAdRow = { id: string; name: string; adsetId: string; campaignId: string; status: string; effectiveStatus: string };
+
+// Account-level list calls (not per-campaign/per-adset — one call each
+// covers the whole account), bundled into the same sync invocation as
+// campaigns/insights, not a new polling pattern.
+export async function fetchMetaAdSets(params: { accessToken: string; adAccountId: string }): Promise<MetaAdSetRow[]> {
+  const { accessToken, adAccountId } = params;
+  const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${adAccountId}/adsets`);
+  url.searchParams.set("fields", "id,name,campaign_id,status,effective_status");
+  url.searchParams.set("limit", "500");
+  url.searchParams.set("access_token", accessToken);
+
+  const rows: MetaAdSetRow[] = [];
+  let nextUrl: string | null = url.toString();
+  while (nextUrl) {
+    const res: Response = await fetch(nextUrl, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Meta adsets fetch failed (${res.status}): ${await res.text()}`);
+    const json = await res.json();
+    for (const item of json.data ?? []) {
+      rows.push({
+        id: item.id,
+        name: item.name,
+        campaignId: item.campaign_id,
+        status: item.status,
+        effectiveStatus: item.effective_status,
+      });
+    }
+    nextUrl = json.paging?.next ?? null;
+  }
+  return rows;
+}
+
+export async function fetchMetaAds(params: { accessToken: string; adAccountId: string }): Promise<MetaAdRow[]> {
+  const { accessToken, adAccountId } = params;
+  const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${adAccountId}/ads`);
+  url.searchParams.set("fields", "id,name,adset_id,campaign_id,status,effective_status");
+  url.searchParams.set("limit", "500");
+  url.searchParams.set("access_token", accessToken);
+
+  const rows: MetaAdRow[] = [];
+  let nextUrl: string | null = url.toString();
+  while (nextUrl) {
+    const res: Response = await fetch(nextUrl, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Meta ads fetch failed (${res.status}): ${await res.text()}`);
+    const json = await res.json();
+    for (const item of json.data ?? []) {
+      rows.push({
+        id: item.id,
+        name: item.name,
+        adsetId: item.adset_id,
+        campaignId: item.campaign_id,
+        status: item.status,
+        effectiveStatus: item.effective_status,
+      });
+    }
+    nextUrl = json.paging?.next ?? null;
+  }
+  return rows;
+}

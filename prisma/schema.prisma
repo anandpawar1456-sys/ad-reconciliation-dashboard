@@ -225,3 +225,31 @@ model MetaCampaign {
 
   @@index([status])
 }
+
+model MetaAdSet {
+  id              String   @id
+  name            String
+  campaignId      String
+  status          String
+  effectiveStatus String
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  @@index([campaignId])
+  @@index([status])
+}
+
+model MetaAd {
+  id              String   @id
+  name            String
+  adsetId         String
+  campaignId      String
+  status          String
+  effectiveStatus String
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  @@index([adsetId])
+  @@index([campaignId])
+  @@index([status])
+}

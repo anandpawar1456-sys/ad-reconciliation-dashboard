@@ -23,6 +23,7 @@ export default async function DashboardPage({
   const isSingleDay = resolved.since.getTime() === resolved.until.getTime();
 
   const data = await getOverviewData(resolved.since, resolved.until);
+  const profit = data.totals.ghlRevenue - data.totals.metaSpend;
 
   const hourly = isSingleDay ? await getHourlyGhlRevenue(resolved.since, timeZone) : null;
   const dayTransactions = isSingleDay ? await getDayTransactions(resolved.since, timeZone) : null;
@@ -56,7 +57,7 @@ export default async function DashboardPage({
         </div>
 
         {/* Stat tiles */}
-        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-5">
+        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <StatTile label="GHL Revenue" value={formatCurrency(data.totals.ghlRevenue)} accent="from-indigo-400 to-blue-500" />
           <StatTile label="Meta Reported Revenue" value={formatCurrency(data.totals.metaRevenue)} accent="from-sky-400 to-cyan-500" />
           <StatTile label="Meta Ad Spend" value={formatCurrency(data.totals.metaSpend)} accent="from-fuchsia-400 to-pink-500" />
@@ -66,6 +67,11 @@ export default async function DashboardPage({
             accent={data.totals.gapAmount > 0 ? "from-rose-400 to-orange-500" : "from-emerald-400 to-teal-500"}
           />
           <StatTile label="True ROAS" value={formatRoas(data.totals.avgTrueRoas)} accent="from-violet-400 to-purple-500" />
+          <StatTile
+            label={profit >= 0 ? "Profit" : "Loss"}
+            value={formatCurrency(Math.abs(profit))}
+            accent={profit >= 0 ? "from-emerald-400 to-teal-500" : "from-red-500 to-rose-600"}
+          />
         </div>
 
         {/* Chart */}

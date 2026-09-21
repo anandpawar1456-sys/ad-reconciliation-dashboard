@@ -8,9 +8,11 @@ import Calendar from "./Calendar";
 export default function DateRangePicker({
   currentPreset,
   currentLabel,
+  basePath = "/dashboard",
 }: {
   currentPreset: RangePreset;
   currentLabel: string;
+  basePath?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -34,7 +36,7 @@ export default function DateRangePicker({
     params.set("range", preset);
     params.delete("since");
     params.delete("until");
-    router.push(`/dashboard?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
     setOpen(false);
     setShowCalendar(false);
   }
@@ -44,7 +46,7 @@ export default function DateRangePicker({
     params.set("range", "custom");
     params.set("since", since);
     params.set("until", until);
-    router.push(`/dashboard?${params.toString()}`);
+    router.push(`${basePath}?${params.toString()}`);
     setOpen(false);
     setShowCalendar(false);
   }
