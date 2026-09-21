@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth";
 
 // Gate every page and API route except the login page/action, the GHL
-// webhook (called by GoHighLevel, not the browser), and the public tracking
-// script (served to visitor browsers on your funnel pages).
+// webhook (called by GoHighLevel, not the browser), the public tracking
+// script (served to visitor browsers on your funnel pages), and the cron
+// routes (called by Vercel's scheduler, not a logged-in browser — each one
+// checks CRON_SECRET itself via lib/cronAuth.ts).
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
   "/api/webhooks/ghl",
   "/api/track",
   "/track.js",
+  "/api/cron",
 ];
 
 export async function middleware(req: NextRequest) {
