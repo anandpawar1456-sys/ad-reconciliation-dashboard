@@ -33,17 +33,23 @@ export type GhlAttribution = {
   campaignId?: string;
 };
 
-// Verified against a real GET /contacts/{id} response (2026-09-21):
-// GHL's own click capture lands on the contact as `attributionSource`
-// (first touch) and `lastAttributionSource` (most recent touch — used
-// here, matching our last-click default model). It gives fbclid, UTM
-// fields, and a direct Meta `adId`, but has no adset/campaign id fields of
-// its own — those come through as `adset_id` and `utm_id` (mapped from
-// Meta's {{campaign.id}}) query params on the captured landing URL instead,
-// so we parse them out of `url`.
+// Verified against real GET /contacts/{id} responses: GHL's own click
+// capture lands on the contact as `attributionSource` (first touch) and
+// `lastAttributionSource` (most recent touch). Critically, for most
+// contacts here `lastAttributionSource` is NOT another ad click — it's the
+// internal checkout/order-form page load itself (sessionSource:
+// "Referral", referrer: leadconnectorhq.com, no UTMs, no fbclid), which
+// silently overwrites the real ad attribution that only survives in the
+// original `attributionSource`. Preferring last-touch unconditionally (the
+// original implementation) meant only contacts whose LAST touch happened
+// to also be an ad click kept their attribution — everyone else lost it
+// entirely. Now: use last-touch only when it actually carries ad signal
+// (fbclid or utmSource present), otherwise fall back to first-touch.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractAttribution(contact: any): GhlAttribution {
-  const source = contact?.lastAttributionSource ?? contact?.attributionSource ?? {};
+  const last = contact?.lastAttributionSource ?? {};
+  const first = contact?.attributionSource ?? {};
+  const source = last.fbclid || last.utmSource ? last : first;
   const urlParams = parseQueryParams(source.url);
 
   return {
