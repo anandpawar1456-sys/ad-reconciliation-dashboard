@@ -1,0 +1,162 @@
+// Ad Reconciliation Dashboard — data model
+//
+// Data flow:
+//   1. Tracking script writes fbclid/UTM/ad ids onto a GHL contact's hidden
+//      form fields at opt-in time -> GhlContact.
+//   2. GHL order/opportunity webhooks + backfill create GhlOrder rows,
+//      linked to the contact that made the purchase.
+//   3. Meta Marketing API daily pull creates MetaInsight rows (spend,
+//      reported purchases/revenue) at campaign/adset/ad level.
+//   4. A rollup job joins GhlOrder -> GhlContact (for ad attribution) against
+//      MetaInsight to produce DailyReconciliation and AdAttribution rows,
+//      which the dashboard reads directly (no heavy joins at request time).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// A GHL contact, enriched with the attribution data our tracking script
+// captured at the moment they opted in. One contact can place many orders.
+model GhlContact {
+  id            String   @id // GHL contact id, used as-is (no surrogate key)
+  email         String?
+  phone         String?
+  fbclid        String?
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  utmContent    String?
+  utmTerm       String?
+  adId          String? // Meta ad id, parsed from utm_content/utm_term or a dedicated param
+  adsetId       String?
+  campaignId    String?
+  firstSeenAt   DateTime? // timestamp captured by the tracking script, not GHL's createdAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  orders        GhlOrder[]
+
+  @@index([adId])
+  @@index([email])
+}
+
+// A single GHL order / transaction / opportunity-won event.
+model GhlOrder {
+  id           String     @id // GHL transaction/order id
+  contactId    String
+  contact      GhlContact @relation(fields: [contactId], references: [id])
+  amount       Decimal    @db.Decimal(12, 2)
+  currency     String     @default("USD")
+  productId    String?
+  productName  String?
+  // FRONT_END | ORDER_BUMP_1 | ORDER_BUMP_2 | UPSELL_1 | UPSELL_2 | UPSELL_3 | UNKNOWN
+  funnelStage  String     @default("UNKNOWN")
+  status       String // e.g. paid, refunded, void
+  occurredAt   DateTime // actual transaction time, used for day bucketing
+  rawPayload   Json? // full webhook payload, kept for re-processing/debugging
+  createdAt    DateTime   @default(now())
+  unmatched    UnmatchedTransaction?
+
+  @@index([occurredAt])
+  @@index([contactId])
+  @@index([funnelStage])
+}
+
+// One row per day per campaign/adset/ad, as reported by Meta.
+model MetaInsight {
+  id            String   @id @default(cuid())
+  date          DateTime // day granularity (time truncated to 00:00 UTC)
+  level         String // campaign | adset | ad
+  campaignId    String
+  campaignName  String?
+  adsetId       String?
+  adsetName     String?
+  adId          String?
+  adName        String?
+  spend         Decimal  @db.Decimal(12, 2)
+  purchases     Int      @default(0)
+  purchaseValue Decimal  @db.Decimal(12, 2) @default(0)
+  reportedRoas  Decimal? @db.Decimal(10, 4)
+  rawPayload    Json?
+  createdAt     DateTime @default(now())
+
+  @@unique([date, level, campaignId, adsetId, adId])
+  @@index([date])
+  @@index([adId])
+}
+
+// Derived, one row per day — what the daily reconciliation dashboard reads.
+model DailyReconciliation {
+  date            DateTime @id
+  ghlRevenue      Decimal  @db.Decimal(12, 2)
+  ghlTransactions Int
+  metaRevenue     Decimal  @db.Decimal(12, 2)
+  metaPurchases   Int
+  gapAmount       Decimal  @db.Decimal(12, 2)
+  gapPercent      Decimal  @db.Decimal(6, 2)
+  computedAt      DateTime @updatedAt
+}
+
+// Derived, one row per day per ad — what the "true ROAS" and missing
+// transaction views read.
+model AdAttribution {
+  id               String   @id @default(cuid())
+  date             DateTime
+  adId             String
+  adsetId          String?
+  campaignId       String?
+  adName           String?
+  metaSpend        Decimal  @db.Decimal(12, 2)
+  metaRevenue      Decimal  @db.Decimal(12, 2)
+  metaRoas         Decimal? @db.Decimal(10, 4)
+  ghlRevenue       Decimal  @db.Decimal(12, 2) // total GHL revenue attributed to this ad
+  recoveredRevenue Decimal  @db.Decimal(12, 2) // ghlRevenue not reflected in metaRevenue
+  trueRevenue      Decimal  @db.Decimal(12, 2) // metaRevenue + recoveredRevenue
+  trueRoas         Decimal? @db.Decimal(10, 4)
+  computedAt       DateTime @updatedAt
+
+  @@unique([date, adId])
+  @@index([date])
+}
+
+// A GHL order with no matching Meta purchase event for its day, surfaced by
+// the missing-transaction finder. Persisted (rather than computed on the
+// fly) so a manual "confirmed" decision sticks.
+model UnmatchedTransaction {
+  id            String   @id @default(cuid())
+  ghlOrderId    String   @unique
+  ghlOrder      GhlOrder @relation(fields: [ghlOrderId], references: [id])
+  reason        String // e.g. "no_ad_attribution", "no_meta_purchase_event"
+  status        String   @default("NEEDS_REVIEW") // NEEDS_REVIEW | CONFIRMED | DISMISSED
+  reviewedAt    DateTime?
+  reviewNote    String?
+  createdAt     DateTime @default(now())
+}
+
+// Single-row settings table — API keys and alert config for this one-user tool.
+model IntegrationSettings {
+  id                    Int      @id @default(1)
+  ghlApiKey             String?
+  ghlLocationId         String?
+  metaAccessToken       String?
+  metaAdAccountId       String?
+  alertThresholdPercent Decimal  @db.Decimal(6, 2) @default(10)
+  alertEmail            String?
+  lastMetaSyncAt        DateTime?
+  lastGhlSyncAt         DateTime?
+  updatedAt             DateTime @updatedAt
+}
+
+// One row per Stripe-price-equivalent: maps a GHL product id to a funnel
+// stage, filled in manually once real product ids are known.
+model ProductFunnelMap {
+  productId   String @id
+  productName String?
+  funnelStage String // FRONT_END | ORDER_BUMP_1 | ORDER_BUMP_2 | UPSELL_1 | UPSELL_2 | UPSELL_3
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

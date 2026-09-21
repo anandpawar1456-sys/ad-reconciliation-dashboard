@@ -1,0 +1,7 @@
+{
+  "crons": [
+    { "path": "/api/cron/meta-sync", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/rollup", "schedule": "15 6 * * *" },
+    { "path": "/api/cron/alert-check", "schedule": "30 6 * * *" }
+  ]
+}
