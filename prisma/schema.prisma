@@ -20,8 +20,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled (pgbouncer) connection, used at runtime
+  directUrl = env("DIRECT_URL") // unpooled connection, used only for migrations
 }
 
 // A GHL contact, enriched with the attribution data our tracking script
