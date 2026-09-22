@@ -1,11 +1,18 @@
 import NavBar from "./NavBar";
 import DateRangePicker from "./DateRangePicker";
 import RevenueChart from "./RevenueChart";
-import { getOverviewData, getEarliestDataDate, getHourlyGhlRevenue, getDayTransactions } from "@/lib/dashboardQueries";
+import {
+  getOverviewData,
+  getEarliestDataDate,
+  getHourlyGhlRevenue,
+  getRangeTransactions,
+  getYesterdaySnapshot,
+  type YesterdaySnapshot,
+} from "@/lib/dashboardQueries";
 import { getSettings } from "@/lib/settings";
 import { resolveRange, type RangePreset } from "@/lib/dateRanges";
 import { DEFAULT_TIMEZONE } from "@/lib/timezone";
-import { formatCurrency, formatRoas } from "@/lib/format";
+import { formatCurrency, formatRoas, formatLabelDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +33,9 @@ export default async function DashboardPage({
   const profit = data.totals.ghlRevenue - data.totals.metaSpend;
 
   const hourly = isSingleDay ? await getHourlyGhlRevenue(resolved.since, timeZone) : null;
-  const dayTransactions = isSingleDay ? await getDayTransactions(resolved.since, timeZone) : null;
+  const transactions = await getRangeTransactions(resolved.since, resolved.until, timeZone);
+  const yesterday = await getYesterdaySnapshot(timeZone);
+  const greeting = getGreeting(timeZone);
 
   const chartPoints = isSingleDay
     ? hourly!.map((h) => ({
@@ -44,7 +53,9 @@ export default async function DashboardPage({
     <div>
       <NavBar />
       <main className="mx-auto max-w-6xl px-6 py-10">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <GreetingBanner greeting={greeting} yesterday={yesterday} />
+
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-ink-900">Overview</h1>
             <p className="mt-1 text-sm text-ink-400">
@@ -89,29 +100,92 @@ export default async function DashboardPage({
           </div>
         </div>
 
-        {/* Single-day transaction timeline */}
-        {isSingleDay && dayTransactions && (
-          <div className="mt-5 section-card">
+        {/* Transaction list for the selected range, with likely-duplicate
+            purchases (same customer/product/amount repeated) flagged so
+            accidental double-charges are easy to spot and refund. */}
+        <div className="mt-5 section-card">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-semibold text-ink-900">Transactions — {resolved.label}</span>
-            <div className="mt-3 max-h-80 space-y-1 overflow-y-auto">
-              {dayTransactions.length === 0 ? (
-                <p className="py-6 text-center text-sm text-ink-400">No transactions on this day.</p>
-              ) : (
-                dayTransactions.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between rounded-xl px-2 py-2 hover:bg-ink-900/[0.03]">
-                    <div className="flex items-center gap-3">
-                      <span className="w-16 shrink-0 text-xs font-medium text-ink-400">{t.time}</span>
-                      <span className="text-sm text-ink-700">{t.email ?? "Unknown contact"}</span>
-                      {t.productName && <span className="text-xs text-ink-400">· {t.productName}</span>}
-                    </div>
-                    <span className="text-sm font-semibold text-ink-900">{formatCurrency(t.amount)}</span>
-                  </div>
-                ))
-              )}
-            </div>
+            {transactions.some((t) => t.isDuplicate) && (
+              <span className="text-xs font-medium text-amber-600">
+                {transactions.filter((t) => t.isDuplicate).length} possible duplicate
+                {transactions.filter((t) => t.isDuplicate).length === 1 ? "" : "s"}
+              </span>
+            )}
           </div>
-        )}
+          <div className="mt-3 max-h-96 space-y-1 overflow-y-auto">
+            {transactions.length === 0 ? (
+              <p className="py-6 text-center text-sm text-ink-400">No transactions in this range.</p>
+            ) : (
+              transactions.map((t) => (
+                <div
+                  key={t.id}
+                  className={`flex flex-wrap items-center justify-between gap-2 rounded-xl px-2 py-2 ${
+                    t.isDuplicate ? "bg-amber-50" : "hover:bg-ink-900/[0.03]"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="w-28 shrink-0 text-xs font-medium text-ink-400">{t.dateTime}</span>
+                    {t.isDuplicate && (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+                        Duplicate
+                      </span>
+                    )}
+                    <span className="text-sm text-ink-700">{t.email ?? "Unknown contact"}</span>
+                    {t.productName && <span className="text-xs text-ink-400">· {t.productName}</span>}
+                  </div>
+                  <span className="text-sm font-semibold text-ink-900">{formatCurrency(t.amount)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </main>
+    </div>
+  );
+}
+
+function getGreeting(timeZone: string): string {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hour12: false }).format(new Date())
+  );
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function GreetingBanner({
+  greeting,
+  yesterday,
+}: {
+  greeting: string;
+  yesterday: YesterdaySnapshot;
+}) {
+  const profitPositive = yesterday.profit >= 0;
+  const dateLabel = formatLabelDate(yesterday.dateLabel);
+
+  return (
+    <div className="section-card bg-gradient-to-br from-indigo-50 via-white to-pink-50">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{greeting}!</h1>
+      {!yesterday.hasData ? (
+        <p className="mt-1.5 text-sm text-ink-400">No data synced for yesterday ({dateLabel}) yet.</p>
+      ) : (
+        <p className="mt-1.5 text-sm text-ink-600">
+          Yesterday ({dateLabel}) you made{" "}
+          <span className={`font-bold ${profitPositive ? "text-emerald-600" : "text-rose-600"}`}>
+            {profitPositive ? "" : "-"}
+            {formatCurrency(Math.abs(yesterday.profit))} {profitPositive ? "profit" : "loss"}
+          </span>{" "}
+          — {formatCurrency(yesterday.ghlRevenue)} GHL revenue vs {formatCurrency(yesterday.metaSpend)} Meta spend.
+          {yesterday.bestAd && (
+            <>
+              {" "}Best performer:{" "}
+              <span className="font-semibold text-ink-900">{yesterday.bestAd.name}</span> —{" "}
+              {formatCurrency(yesterday.bestAd.profit)} profit ({formatRoas(yesterday.bestAd.trueRoas)} True ROAS).
+            </>
+          )}
+        </p>
+      )}
     </div>
   );
 }

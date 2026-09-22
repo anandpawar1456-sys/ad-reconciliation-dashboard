@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { toLocalDateLabel } from "@/lib/timezone";
 
 // Window filters below don't need to be exact label-date boundaries — a
 // day of slop on a "last N days" display window is inconsequential, unlike
@@ -247,4 +248,116 @@ export async function getDayTransactions(dayLabel: Date, timeZone: string): Prom
     email: o.contact?.email ?? null,
     productName: o.productName ?? o.sourceName ?? null,
   }));
+}
+
+export type RangeTransaction = {
+  id: string;
+  dateTime: string;
+  amount: number;
+  email: string | null;
+  productName: string | null;
+  isDuplicate: boolean;
+};
+
+// The transaction list shown on the homepage for whatever date range is
+// selected (not just a single day). A transaction is flagged as a likely
+// DUPLICATE when the same customer bought the same product for the same
+// amount more than once in the range — usually an accidental double
+// checkout submission, not two genuine separate sales. The first
+// occurrence (chronologically) is left unflagged as the presumed real
+// sale; later repeats in the same group are flagged.
+export async function getRangeTransactions(since: Date, until: Date, timeZone: string): Promise<RangeTransaction[]> {
+  const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
+  const orders = await prisma.ghlOrder.findMany({
+    where: { occurredAt: { gte: since, lt: untilExclusive }, status: "completed" },
+    include: { contact: true },
+    orderBy: { occurredAt: "desc" },
+    take: 500,
+  });
+
+  const runningCount = new Map<string, number>();
+  const isDuplicateById = new Map<string, boolean>();
+  for (const o of [...orders].reverse()) {
+    const key = `${o.contactId}|${o.productId ?? o.productName ?? ""}|${Number(o.amount)}`;
+    const count = (runningCount.get(key) ?? 0) + 1;
+    runningCount.set(key, count);
+    isDuplicateById.set(o.id, count > 1);
+  }
+
+  const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  return orders.map((o) => ({
+    id: o.id,
+    dateTime: dateTimeFormatter.format(o.occurredAt),
+    amount: Number(o.amount),
+    email: o.contact?.email ?? null,
+    productName: o.productName ?? o.sourceName ?? null,
+    isDuplicate: isDuplicateById.get(o.id) ?? false,
+  }));
+}
+
+export type YesterdaySnapshot = {
+  dateLabel: Date;
+  hasData: boolean;
+  profit: number;
+  ghlRevenue: number;
+  metaSpend: number;
+  bestAd: {
+    name: string;
+    trueRevenue: number;
+    metaSpend: number;
+    trueRoas: number | null;
+    profit: number;
+  } | null;
+};
+
+// Powers the homepage's daily greeting — yesterday's profit and the
+// single best-performing ad, computed from the same tables the rest of
+// the dashboard reads (DailyReconciliation for revenue, AdAttribution for
+// per-ad true revenue/spend), independent of whatever date range the
+// visitor currently has selected.
+export async function getYesterdaySnapshot(timeZone: string): Promise<YesterdaySnapshot> {
+  const today = toLocalDateLabel(new Date(), timeZone);
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+
+  const [reconciliation, attributionRows] = await Promise.all([
+    prisma.dailyReconciliation.findFirst({ where: { date: yesterday } }),
+    prisma.adAttribution.findMany({ where: { date: yesterday } }),
+  ]);
+
+  const ghlRevenue = Number(reconciliation?.ghlRevenue ?? 0);
+  const metaSpend = attributionRows.reduce((sum, r) => sum + Number(r.metaSpend), 0);
+  const profit = ghlRevenue - metaSpend;
+
+  let bestAd: YesterdaySnapshot["bestAd"] = null;
+  for (const row of attributionRows) {
+    const rowSpend = Number(row.metaSpend);
+    const rowTrueRevenue = Number(row.trueRevenue);
+    const adProfit = rowTrueRevenue - rowSpend;
+    if (!bestAd || adProfit > bestAd.profit) {
+      bestAd = {
+        name: row.adName ?? row.adId,
+        trueRevenue: rowTrueRevenue,
+        metaSpend: rowSpend,
+        trueRoas: rowSpend > 0 ? rowTrueRevenue / rowSpend : null,
+        profit: adProfit,
+      };
+    }
+  }
+
+  return {
+    dateLabel: yesterday,
+    hasData: !!reconciliation || attributionRows.length > 0,
+    profit,
+    ghlRevenue,
+    metaSpend,
+    bestAd,
+  };
 }

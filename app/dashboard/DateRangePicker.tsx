@@ -16,7 +16,9 @@ export default function DateRangePicker({
 }) {
   const [open, setOpen] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [mobileTop, setMobileTop] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -30,6 +32,10 @@ export default function DateRangePicker({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!open) setMobileTop(null);
+  }, [open]);
 
   function selectPreset(preset: RangePreset) {
     const params = new URLSearchParams(searchParams.toString());
@@ -51,10 +57,23 @@ export default function DateRangePicker({
     setShowCalendar(false);
   }
 
+  // On a wrapped header row the button can land anywhere on the line
+  // (not necessarily the right edge), so an `absolute right-0` popover
+  // anchored to it can render off-screen. Below the sm breakpoint, measure
+  // the button's actual position and use `fixed` positioning clamped to
+  // the viewport instead of anchoring to the button.
+  function toggleOpen() {
+    if (!open && buttonRef.current && window.innerWidth < 640) {
+      setMobileTop(buttonRef.current.getBoundingClientRect().bottom + 8);
+    }
+    setOpen((v) => !v);
+  }
+
   return (
     <div className="relative" ref={containerRef}>
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={buttonRef}
+        onClick={toggleOpen}
         className="flex items-center gap-2 rounded-2xl border border-ink-900/10 bg-white/80 px-4 py-2 text-sm font-semibold text-ink-900 shadow-sm transition hover:bg-white"
       >
         {currentLabel}
@@ -64,8 +83,19 @@ export default function DateRangePicker({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-2 flex gap-2">
-          <div className="w-48 rounded-2xl border border-white/60 bg-white/95 p-2 shadow-soft backdrop-blur-xl">
+        // Stacked by default (fits any phone width) and side-by-side once
+        // there's room — laying the preset list and calendar out
+        // horizontally always needs ~450px, which clips off-screen on a
+        // 375px viewport if forced with flex-row unconditionally. Below
+        // sm, positioned `fixed` at the measured top (see toggleOpen) and
+        // clamped to the viewport width instead of anchored to the
+        // button, since the button isn't reliably at the right edge once
+        // the header wraps.
+        <div
+          className="z-20 flex max-w-[calc(100vw-2rem)] flex-col gap-2 sm:absolute sm:right-0 sm:mt-2 sm:max-w-none sm:flex-row"
+          style={mobileTop !== null ? { position: "fixed", top: mobileTop, left: 16, right: 16 } : undefined}
+        >
+          <div className="w-48 max-w-full rounded-2xl border border-white/60 bg-white/95 p-2 shadow-soft backdrop-blur-xl">
             {RANGE_PRESETS.filter((p) => p.value !== "custom").map((p) => (
               <button
                 key={p.value}
@@ -90,7 +120,7 @@ export default function DateRangePicker({
           </div>
 
           {showCalendar && (
-            <div className="rounded-2xl border border-white/60 bg-white/95 p-3 shadow-soft backdrop-blur-xl">
+            <div className="max-w-full rounded-2xl border border-white/60 bg-white/95 p-3 shadow-soft backdrop-blur-xl">
               <Calendar onRangeSelected={applyCustomRange} />
             </div>
           )}
