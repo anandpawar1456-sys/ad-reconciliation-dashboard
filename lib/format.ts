@@ -10,6 +10,10 @@ export function formatRoas(value: number | null): string {
   return value === null ? "—" : `${value.toFixed(2)}x`;
 }
 
+export function formatCpa(value: number | null): string {
+  return value === null ? "—" : formatCurrency(value);
+}
+
 export function formatDate(d: Date): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(d);
 }

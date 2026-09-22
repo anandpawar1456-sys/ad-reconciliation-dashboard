@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { formatCurrency, formatRoas } from "@/lib/format";
+import { formatCurrency, formatRoas, formatCpa } from "@/lib/format";
 import StatusBadge from "./StatusBadge";
 import type { HierarchySummary } from "@/lib/campaignQueries";
 
@@ -71,6 +71,7 @@ export default function HierarchyTable({
   const totalMetaRoas = totals.spend > 0 ? totals.metaRevenue / totals.spend : null;
   const totalTrueRoas = totals.spend > 0 ? totals.trueRevenue / totals.spend : null;
   const totalCtr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
+  const totalCpa = totals.purchases > 0 ? totals.spend / totals.purchases : null;
 
   function toggleRow(id: string) {
     setSelected((prev) => {
@@ -111,7 +112,7 @@ export default function HierarchyTable({
         </div>
       )}
 
-      <table className="w-full min-w-[1560px] text-sm">
+      <table className="w-full min-w-[1680px] text-sm">
         <thead>
           <tr className="border-b border-ink-900/10 text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
             <th className="py-3 pr-2 w-8" />
@@ -127,7 +128,8 @@ export default function HierarchyTable({
             <th className="py-3 pr-4">Meta P/L</th>
             <th className="py-3 pr-4">CTR</th>
             <th className="py-3 pr-4">Purchases</th>
-            <th className="py-3">Unique Link Clicks</th>
+            <th className="py-3 pr-4">Unique Link Clicks</th>
+            <th className="py-3">CPA</th>
           </tr>
         </thead>
         <tbody>
@@ -182,7 +184,8 @@ export default function HierarchyTable({
                 </td>
                 <td className="py-3 pr-4 text-ink-700">{r.ctr.toFixed(2)}%</td>
                 <td className="py-3 pr-4 text-ink-700">{r.purchases}</td>
-                <td className="py-3 text-ink-700">{r.uniqueLinkClicks.toLocaleString()}</td>
+                <td className="py-3 pr-4 text-ink-700">{r.uniqueLinkClicks.toLocaleString()}</td>
+                <td className="py-3 text-ink-700">{formatCpa(r.cpa)}</td>
               </tr>
             );
           })}
@@ -210,7 +213,8 @@ export default function HierarchyTable({
             </td>
             <td className="py-3 pr-4 text-ink-900">{totalCtr.toFixed(2)}%</td>
             <td className="py-3 pr-4 text-ink-900">{totals.purchases}</td>
-            <td className="py-3 text-ink-900">{totals.uniqueLinkClicks.toLocaleString()}</td>
+            <td className="py-3 pr-4 text-ink-900">{totals.uniqueLinkClicks.toLocaleString()}</td>
+            <td className="py-3 text-ink-900">{formatCpa(totalCpa)}</td>
           </tr>
         </tfoot>
       </table>

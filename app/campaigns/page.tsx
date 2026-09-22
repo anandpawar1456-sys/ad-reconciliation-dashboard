@@ -2,11 +2,13 @@ import Link from "next/link";
 import NavBar from "../dashboard/NavBar";
 import DateRangePicker from "../dashboard/DateRangePicker";
 import HierarchyTable from "./HierarchyTable";
-import { getCampaignSummaries } from "@/lib/campaignQueries";
+import CpaChart from "./CpaChart";
+import { getCampaignSummaries, getCpaTrend } from "@/lib/campaignQueries";
 import { getEarliestDataDate } from "@/lib/dashboardQueries";
 import { getSettings } from "@/lib/settings";
 import { resolveRange, type RangePreset } from "@/lib/dateRanges";
 import { DEFAULT_TIMEZONE } from "@/lib/timezone";
+import { formatCpa } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +32,12 @@ export default async function CampaignsPage({
   const resolved = resolveRange(preset, timeZone, earliestDataDate, searchParams.since, searchParams.until);
 
   const campaigns = await getCampaignSummaries(resolved.since, resolved.until);
+  const cpaTrend = await getCpaTrend(resolved.since, resolved.until);
+  const cpaPoints = cpaTrend.map((p) => ({ label: formatShortDate(p.date), cpa: p.cpa }));
+  const overallCpa =
+    cpaTrend.reduce((sum, p) => sum + p.purchases, 0) > 0
+      ? cpaTrend.reduce((sum, p) => sum + p.spend, 0) / cpaTrend.reduce((sum, p) => sum + p.purchases, 0)
+      : null;
 
   const status = searchParams.status ?? "all";
   const filtered = campaigns.filter((c) => {
@@ -78,6 +86,16 @@ export default async function CampaignsPage({
           </div>
         </div>
 
+        <div className="mt-6 section-card">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-ink-900">CPA Trend</span>
+            <span className="text-xs text-ink-400">Avg CPA: {formatCpa(overallCpa)}</span>
+          </div>
+          <div className="mt-3">
+            <CpaChart points={cpaPoints} />
+          </div>
+        </div>
+
         <div className="mt-6 section-card overflow-x-auto">
           <HierarchyTable
             rows={filtered}
@@ -89,4 +107,8 @@ export default async function CampaignsPage({
       </main>
     </div>
   );
+}
+
+function formatShortDate(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(d);
 }

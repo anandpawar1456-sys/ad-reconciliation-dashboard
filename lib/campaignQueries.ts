@@ -20,6 +20,7 @@ export type HierarchySummary = {
   uniqueLinkClicks: number;
   ctr: number;
   frequency: number;
+  cpa: number | null; // spend / purchases — Meta's own purchase count, not GHL's
 };
 
 type Level = "campaign" | "adset" | "ad";
@@ -79,6 +80,7 @@ async function getHierarchySummaries(
       uniqueLinkClicks: 0,
       ctr: 0,
       frequency: 0,
+      cpa: null,
     };
   }
 
@@ -160,6 +162,7 @@ async function getHierarchySummaries(
       trueRoas: c.spend > 0 ? trueRevenue / c.spend : null,
       ctr: c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0,
       frequency: freq && freq.count > 0 ? freq.sum / freq.count : 0,
+      cpa: c.purchases > 0 ? c.spend / c.purchases : null,
     };
   });
 
@@ -176,6 +179,35 @@ export async function getAdSetSummaries(campaignId: string, since: Date, until: 
 
 export async function getAdSummaries(adsetId: string, since: Date, until: Date): Promise<HierarchySummary[]> {
   return getHierarchySummaries("ad", adsetId, since, until);
+}
+
+export type CpaTrendPoint = { date: Date; spend: number; purchases: number; cpa: number | null };
+
+// Daily CPA (spend / Meta purchases) across the whole account for the
+// selected range, powering the trend chart on the Campaigns page — built
+// straight from MetaInsight (ad-level, daily) rather than the
+// already-aggregated DailyReconciliation table, since that table doesn't
+// carry spend.
+export async function getCpaTrend(since: Date, until: Date): Promise<CpaTrendPoint[]> {
+  const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
+  const rows = await prisma.metaInsight.findMany({
+    where: { date: { gte: since, lt: untilExclusive }, level: "ad" },
+    select: { date: true, spend: true, purchases: true },
+    orderBy: { date: "asc" },
+  });
+
+  const byDay = new Map<string, { date: Date; spend: number; purchases: number }>();
+  for (const row of rows) {
+    const key = row.date.toISOString();
+    const entry = byDay.get(key) ?? { date: row.date, spend: 0, purchases: 0 };
+    entry.spend += Number(row.spend);
+    entry.purchases += row.purchases;
+    byDay.set(key, entry);
+  }
+
+  return [...byDay.values()]
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .map((d) => ({ ...d, cpa: d.purchases > 0 ? d.spend / d.purchases : null }));
 }
 
 export async function getCampaignName(campaignId: string): Promise<string | null> {
