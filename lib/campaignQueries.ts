@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
+import { isExcludedCampaignName, notExcludedCampaignName } from "@/lib/excludedCampaigns";
 import { getUtcRangeForLabels, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
 // GHL orders carry real UTC instants, so a label-date range has to be
@@ -49,7 +50,7 @@ async function getHierarchySummaries(
   const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
   const idField = level === "campaign" ? "campaignId" : level === "adset" ? "adsetId" : "adId";
 
-  const insightWhere: Record<string, unknown> = { date: { gte: since, lt: untilExclusive }, level: "ad" };
+  const insightWhere: Record<string, unknown> = { date: { gte: since, lt: untilExclusive }, level: "ad", ...notExcludedCampaignName };
   if (level === "adset" && parentId) insightWhere.campaignId = parentId;
   if (level === "ad" && parentId) insightWhere.adsetId = parentId;
 
@@ -63,7 +64,9 @@ async function getHierarchySummaries(
         : prisma.metaAd.findMany(parentId ? { where: { adsetId: parentId } } : undefined),
   ]);
 
-  const statusById = new Map(statusRows.map((s) => [s.id, s]));
+  // Excluded (non-US/GHL) campaigns are hidden at the campaign level.
+  const visibleStatusRows = level === "campaign" ? statusRows.filter((s) => !isExcludedCampaignName(s.name)) : statusRows;
+  const statusById = new Map(visibleStatusRows.map((s) => [s.id, s]));
 
   const byId = new Map<string, HierarchySummary>();
   const freqSums = new Map<string, { sum: number; count: number }>();
@@ -97,7 +100,7 @@ async function getHierarchySummaries(
   // row first, so a campaign/ad set/ad with no activity in the selected
   // range still shows up — the full list should always be there, only the
   // numbers should change with the date range, not which rows exist.
-  for (const status of statusRows) {
+  for (const status of visibleStatusRows) {
     byId.set(status.id, blankSummary(status.id, status.name));
   }
 
@@ -201,7 +204,7 @@ export type CpaTrendPoint = { date: Date; spend: number; purchases: number; cpa:
 export async function getCpaTrend(since: Date, until: Date): Promise<CpaTrendPoint[]> {
   const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
   const rows = await prisma.metaInsight.findMany({
-    where: { date: { gte: since, lt: untilExclusive }, level: "ad" },
+    where: { date: { gte: since, lt: untilExclusive }, level: "ad", ...notExcludedCampaignName },
     select: { date: true, spend: true, purchases: true },
     orderBy: { date: "asc" },
   });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedCron } from "@/lib/cronAuth";
-import { computeRollupRange } from "@/lib/rollup";
+import { computeRollupRange, computeDailyRollup } from "@/lib/rollup";
 import { getSettings } from "@/lib/settings";
 import { toLocalDateLabel, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
@@ -15,6 +15,14 @@ const LOOKBACK_DAYS = 7;
 export async function GET(req: NextRequest) {
   if (!isAuthorizedCron(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // ?dates=YYYY-MM-DD,YYYY-MM-DD recomputes just those days.
+  const datesParam = req.nextUrl.searchParams.get("dates");
+  if (datesParam) {
+    const list = datesParam.split(",").map((d) => d.trim()).filter(Boolean);
+    for (const d of list) await computeDailyRollup(new Date(d));
+    return NextResponse.json({ ok: true, rollupDays: list.length });
   }
 
   const settings = await getSettings();

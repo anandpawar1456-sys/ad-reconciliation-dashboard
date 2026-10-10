@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { GhlOrder, GhlContact, MetaInsight } from "@prisma/client";
 import { getSettings } from "@/lib/settings";
 import { getUtcDayRange, DEFAULT_TIMEZONE } from "@/lib/timezone";
+import { EXCLUDED_CAMPAIGN_KEYWORDS, notExcludedCampaignName } from "@/lib/excludedCampaigns";
 
 // Only orders in these statuses count as real revenue. Confirmed against
 // this account's actual order history (1564 orders sampled): GHL's
@@ -30,8 +31,20 @@ export async function computeDailyRollup(labelDate: Date): Promise<void> {
   });
 
   const metaRows = await prisma.metaInsight.findMany({
-    where: { date: labelDate, level: "ad" },
+    where: { date: labelDate, level: "ad", ...notExcludedCampaignName },
   });
+
+  // Drop any attribution rows previously written for excluded campaigns
+  // (e.g. the India Moto campaigns) so they stop counting toward spend.
+  const excludedCampaigns = await prisma.metaCampaign.findMany({
+    where: { OR: EXCLUDED_CAMPAIGN_KEYWORDS.map((k) => ({ name: { contains: k, mode: "insensitive" as const } })) },
+    select: { id: true },
+  });
+  if (excludedCampaigns.length > 0) {
+    await prisma.adAttribution.deleteMany({
+      where: { date: labelDate, campaignId: { in: excludedCampaigns.map((c) => c.id) } },
+    });
+  }
 
   await upsertDailyReconciliation(labelDate, orders, metaRows);
   await upsertAdAttribution(labelDate, orders, metaRows);
