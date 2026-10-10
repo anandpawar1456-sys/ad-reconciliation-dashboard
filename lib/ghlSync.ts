@@ -3,6 +3,7 @@ import { listGhlOrders, getGhlContact, extractAttribution } from "@/lib/ghl";
 import { computeDailyRollup } from "@/lib/rollup";
 import { toLocalDateLabel, DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { getSettings } from "@/lib/settings";
+import { resolveUnattributedContacts } from "@/lib/attributionResolve";
 
 // Coarse, honest mapping from GHL's raw sourceSubType. GHL bundles the
 // front end + its order bumps into a single "one_step_order_form" order
@@ -54,7 +55,18 @@ export async function syncGhlOrders(
     if (data.length === 0) break;
     ordersSeen += data.length;
 
+    // Polling runs every few minutes, so most of each page is orders we
+    // already have unchanged — skip those (no upsert, no re-rollup).
+    const existingRows = await prisma.ghlOrder.findMany({
+      where: { id: { in: data.map((o) => o.id) } },
+      select: { id: true, amount: true, status: true },
+    });
+    const existingById = new Map(existingRows.map((o) => [o.id, o]));
+
     for (const order of data) {
+      const existing = existingById.get(order.id);
+      if (existing && Number(existing.amount) === order.amount && existing.status === order.status) continue;
+
       await ensureContact(order.contactId, settings.ghlApiKey, knownContacts);
 
       const occurredAt = new Date(order.createdAt);
@@ -94,6 +106,18 @@ export async function syncGhlOrders(
       ordersUpserted += 1;
       touchedDays.add(toLocalDateLabel(occurredAt, timeZone).toISOString());
     }
+  }
+
+  // Contacts that just became attributable (new ads synced, names matched)
+  // change the ad-level numbers for days whose orders themselves didn't
+  // change — add those days to the rollup too.
+  const resolvedContactIds = await resolveUnattributedContacts();
+  if (resolvedContactIds.length > 0) {
+    const affected = await prisma.ghlOrder.findMany({
+      where: { contactId: { in: resolvedContactIds } },
+      select: { occurredAt: true },
+    });
+    for (const o of affected) touchedDays.add(toLocalDateLabel(o.occurredAt, timeZone).toISOString());
   }
 
   let daysRolledUp = 0;

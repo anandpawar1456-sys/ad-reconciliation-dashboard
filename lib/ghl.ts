@@ -133,3 +133,36 @@ export async function listGhlOrders(
 
   return { data, totalCount: json.totalCount ?? 0 };
 }
+
+export type GhlFunnelStepInfo = { funnelName: string; stepName: string };
+
+// GET /funnels/funnel/list — each funnel carries its steps with names, which
+// is the only place GHL exposes a human name for an order's sourceStepId
+// (e.g. "Checkout", "Upsell 1 - DDC"). Needs the funnels scope on the
+// private integration token; returns an empty map if that's unavailable so
+// the funnel page degrades to raw step ids instead of failing.
+export async function getGhlFunnelStepNames(apiKey: string, locationId: string): Promise<Map<string, GhlFunnelStepInfo>> {
+  const names = new Map<string, GhlFunnelStepInfo>();
+  try {
+    const url = new URL(`${GHL_API_BASE}/funnels/funnel/list`);
+    url.searchParams.set("locationId", locationId);
+    url.searchParams.set("limit", "100");
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${apiKey}`, Version: GHL_API_VERSION },
+      next: { revalidate: 3600 },
+    });
+    if (!res.ok) return names;
+    const json = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const funnel of (json.funnels ?? []) as any[]) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const step of (funnel.steps ?? []) as any[]) {
+        const id = step.id ?? step._id;
+        if (id) names.set(id, { funnelName: funnel.name, stepName: step.name });
+      }
+    }
+  } catch (err) {
+    console.error("GHL funnel list fetch failed", err);
+  }
+  return names;
+}

@@ -73,7 +73,7 @@ export default async function DashboardPage({
           <StatTile label="Meta Reported Revenue" value={formatCurrency(data.totals.metaRevenue)} accent="from-sky-400 to-cyan-500" />
           <StatTile label="Meta Ad Spend" value={formatCurrency(data.totals.metaSpend)} accent="from-fuchsia-400 to-pink-500" />
           <StatTile
-            label="Gap (GHL − Meta Revenue)"
+            label="Gap (Meta-driven GHL − Meta)"
             value={`${formatCurrency(data.totals.gapAmount)} (${data.totals.gapPercent.toFixed(1)}%)`}
             accent={data.totals.gapAmount > 0 ? "from-rose-400 to-orange-500" : "from-emerald-400 to-teal-500"}
           />
@@ -84,6 +84,14 @@ export default async function DashboardPage({
             accent={profit >= 0 ? "from-emerald-400 to-teal-500" : "from-red-500 to-rose-600"}
           />
         </div>
+
+        {data.totals.ghlOtherRevenue > 0 && (
+          <p className="mt-3 text-xs text-ink-400">
+            Gap compares Meta&apos;s revenue with the {formatCurrency(data.totals.ghlMetaRevenue)} of GHL sales that came through Meta
+            ads. {formatCurrency(data.totals.ghlOtherRevenue)} of GHL sales (organic, email, direct) are excluded since Meta can&apos;t
+            see them.
+          </p>
+        )}
 
         {/* Chart */}
         <div className="mt-5 section-card">

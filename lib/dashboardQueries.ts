@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { toLocalDateLabel } from "@/lib/timezone";
+import { toLocalDateLabel, getUtcRangeForLabels, DEFAULT_TIMEZONE } from "@/lib/timezone";
+import { getSettings } from "@/lib/settings";
 
 // Window filters below don't need to be exact label-date boundaries — a
 // day of slop on a "last N days" display window is inconsequential, unlike
@@ -76,32 +77,51 @@ export async function getAdAttributionTotals(since: Date, until: Date): Promise<
   return totals.sort((a, b) => b.trueRevenue - a.trueRevenue);
 }
 
-export type FunnelStageTotal = {
-  funnelStage: string;
+export type FunnelStepTotal = { stepId: string | null; revenue: number; transactions: number };
+
+export type FunnelTotal = {
+  funnelName: string;
   revenue: number;
   transactions: number;
+  steps: FunnelStepTotal[];
 };
 
-export async function getFunnelBreakdown(since: Date, until: Date): Promise<FunnelStageTotal[]> {
-  const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
+// Revenue grouped by the GHL funnel each order actually came from
+// (order.sourceName) and, within it, by funnel step (order.sourceStepId —
+// step names are resolved from GHL's funnel list by the page).
+export async function getFunnelsBreakdown(since: Date, until: Date): Promise<FunnelTotal[]> {
+  const settings = await getSettings();
+  const range = getUtcRangeForLabels(since, until, settings.reportingTimezone || DEFAULT_TIMEZONE);
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: since, lt: untilExclusive }, status: { in: ["completed"] } },
-    select: { funnelStage: true, amount: true },
+    where: { occurredAt: { gte: range.start, lt: range.end }, status: "completed" },
+    select: { sourceName: true, sourceStepId: true, amount: true },
   });
 
-  const byStage = new Map<string, FunnelStageTotal>();
+  const byFunnel = new Map<string, FunnelTotal>();
+  const byStep = new Map<string, FunnelStepTotal>();
   for (const order of orders) {
-    const entry = byStage.get(order.funnelStage) ?? {
-      funnelStage: order.funnelStage,
-      revenue: 0,
-      transactions: 0,
-    };
-    entry.revenue += Number(order.amount);
-    entry.transactions += 1;
-    byStage.set(order.funnelStage, entry);
+    const funnelName = order.sourceName ?? "Unknown funnel";
+    const amount = Number(order.amount);
+
+    const funnel = byFunnel.get(funnelName) ?? { funnelName, revenue: 0, transactions: 0, steps: [] };
+    funnel.revenue += amount;
+    funnel.transactions += 1;
+    byFunnel.set(funnelName, funnel);
+
+    const stepKey = `${funnelName}|${order.sourceStepId ?? ""}`;
+    let step = byStep.get(stepKey);
+    if (!step) {
+      step = { stepId: order.sourceStepId ?? null, revenue: 0, transactions: 0 };
+      byStep.set(stepKey, step);
+      funnel.steps.push(step);
+    }
+    step.revenue += amount;
+    step.transactions += 1;
   }
 
-  return [...byStage.values()].sort((a, b) => b.revenue - a.revenue);
+  const funnels = [...byFunnel.values()];
+  for (const f of funnels) f.steps.sort((a, b) => b.revenue - a.revenue);
+  return funnels.sort((a, b) => b.revenue - a.revenue);
 }
 
 export async function getUnmatchedTransactions() {
@@ -128,7 +148,9 @@ export type OverviewData = {
     metaSpend: number;
     metaRevenue: number;
     metaPurchases: number;
-    gapAmount: number;
+    ghlMetaRevenue: number; // GHL revenue from contacts that came through Meta ads
+    ghlOtherRevenue: number; // organic / email / direct sales — can't be in Meta's number
+    gapAmount: number; // ghlMetaRevenue - metaRevenue (like-for-like)
     gapPercent: number;
     trueRevenue: number;
     avgTrueRoas: number | null;
@@ -142,13 +164,34 @@ export type OverviewData = {
 export async function getOverviewData(since: Date, until: Date): Promise<OverviewData> {
   const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
 
-  const [reconciliationRows, attributionRows] = await Promise.all([
+  const settings = await getSettings();
+  const orderRange = getUtcRangeForLabels(since, until, settings.reportingTimezone || DEFAULT_TIMEZONE);
+
+  const [reconciliationRows, attributionRows, rangeOrders] = await Promise.all([
     prisma.dailyReconciliation.findMany({
       where: { date: { gte: since, lt: untilExclusive } },
       orderBy: { date: "asc" },
     }),
     prisma.adAttribution.findMany({ where: { date: { gte: since, lt: untilExclusive } } }),
+    prisma.ghlOrder.findMany({
+      where: { occurredAt: { gte: orderRange.start, lt: orderRange.end }, status: "completed" },
+      select: { amount: true, contact: { select: { fbclid: true, utmSource: true, adId: true } } },
+    }),
   ]);
+
+  // Meta's revenue can only ever contain sales that came through Meta ads,
+  // so the gap is only meaningful against GHL sales that did too. Organic,
+  // email and direct sales are split out instead of inflating the gap.
+  const META_SOURCES = ["meta", "facebook", "fb", "ig", "instagram"];
+  let ghlMetaRevenue = 0;
+  let ghlOtherRevenue = 0;
+  for (const o of rangeOrders) {
+    const source = (o.contact?.utmSource ?? "").toLowerCase();
+    const metaDriven =
+      !!o.contact?.adId || !!o.contact?.fbclid || META_SOURCES.some((m) => source === m || source.startsWith(m + " "));
+    if (metaDriven) ghlMetaRevenue += Number(o.amount);
+    else ghlOtherRevenue += Number(o.amount);
+  }
 
   const series: DailySeriesPoint[] = reconciliationRows.map((r) => ({
     date: r.date,
@@ -180,13 +223,13 @@ export async function getOverviewData(since: Date, until: Date): Promise<Overvie
   // Gap compares GHL's real revenue against what Meta REPORTED AS REVENUE
   // from purchases it tracked — not against ad spend, which is a different
   // number entirely (see the Meta Ad Spend / Meta Reported Revenue tiles).
-  const gapAmount = totals.ghlRevenue - totals.metaRevenue;
-  const gapPercent = totals.metaRevenue > 0 ? (gapAmount / totals.metaRevenue) * 100 : totals.ghlRevenue > 0 ? 100 : 0;
+  const gapAmount = ghlMetaRevenue - totals.metaRevenue;
+  const gapPercent = totals.metaRevenue > 0 ? (gapAmount / totals.metaRevenue) * 100 : ghlMetaRevenue > 0 ? 100 : 0;
   const avgTrueRoas = metaSpend > 0 ? trueRevenue / metaSpend : null;
 
   return {
     series,
-    totals: { ...totals, metaSpend, gapAmount, gapPercent, trueRevenue, avgTrueRoas },
+    totals: { ...totals, metaSpend, ghlMetaRevenue, ghlOtherRevenue, gapAmount, gapPercent, trueRevenue, avgTrueRoas },
   };
 }
 
@@ -267,9 +310,9 @@ export type RangeTransaction = {
 // occurrence (chronologically) is left unflagged as the presumed real
 // sale; later repeats in the same group are flagged.
 export async function getRangeTransactions(since: Date, until: Date, timeZone: string): Promise<RangeTransaction[]> {
-  const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
+  const range = getUtcRangeForLabels(since, until, timeZone);
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: since, lt: untilExclusive }, status: "completed" },
+    where: { occurredAt: { gte: range.start, lt: range.end }, status: "completed" },
     include: { contact: true },
     orderBy: { occurredAt: "desc" },
     take: 500,

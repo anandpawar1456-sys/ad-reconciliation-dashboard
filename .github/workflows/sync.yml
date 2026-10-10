@@ -1,0 +1,30 @@
+name: Sync GHL + Meta data
+
+# Vercel's free Hobby plan only runs cron jobs once a day, so this free
+# scheduler pings the app instead: GHL orders every 15 minutes, Meta ad
+# data (spend/purchases/status) every hour. The endpoint throttles itself,
+# so a delayed or duplicated run is harmless.
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # GHL orders
+    - cron: "7 * * * *"      # Meta ads
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "ghl or meta"
+        default: "ghl"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger sync
+        env:
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_JOB: ${{ github.event.inputs.job }}
+        run: |
+          if [ "$EVENT_SCHEDULE" = "7 * * * *" ]; then JOB=meta
+          elif [ -n "$INPUT_JOB" ]; then JOB="$INPUT_JOB"
+          else JOB=ghl; fi
+          curl --fail-with-body --silent --show-error --retry 2 --retry-delay 10 --max-time 120             "https://ad-reconciliation-dashboard.vercel.app/api/cron/tick?job=$JOB"

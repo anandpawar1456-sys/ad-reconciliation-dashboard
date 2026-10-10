@@ -1,4 +1,13 @@
 import { prisma } from "@/lib/prisma";
+import { getSettings } from "@/lib/settings";
+import { getUtcRangeForLabels, DEFAULT_TIMEZONE } from "@/lib/timezone";
+
+// GHL orders carry real UTC instants, so a label-date range has to be
+// converted to the reporting timezone's actual day boundaries first.
+async function getOrderRange(since: Date, until: Date): Promise<{ start: Date; end: Date }> {
+  const settings = await getSettings();
+  return getUtcRangeForLabels(since, until, settings.reportingTimezone || DEFAULT_TIMEZONE);
+}
 
 export type HierarchySummary = {
   id: string;
@@ -125,9 +134,10 @@ async function getHierarchySummaries(
 
   // GHL revenue joined via the contact's captured attribution id for this level.
   const contactField = level === "campaign" ? "campaignId" : level === "adset" ? "adsetId" : "adId";
+  const orderRange = await getOrderRange(since, until);
   const ghlOrders = await prisma.ghlOrder.findMany({
     where: {
-      occurredAt: { gte: since, lt: untilExclusive },
+      occurredAt: { gte: orderRange.start, lt: orderRange.end },
       status: "completed",
       contact: parentId
         ? level === "adset"
@@ -242,9 +252,9 @@ export type AdCustomer = {
 // every status (not just "completed") so pending/refunded orders are
 // still visible for context, same as the funnel/reconciliation views.
 export async function getAdCustomers(adId: string, since: Date, until: Date): Promise<AdCustomer[]> {
-  const untilExclusive = new Date(until.getTime() + 24 * 60 * 60 * 1000);
+  const orderRange = await getOrderRange(since, until);
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: since, lt: untilExclusive }, contact: { adId } },
+    where: { occurredAt: { gte: orderRange.start, lt: orderRange.end }, contact: { adId } },
     include: { contact: { select: { email: true, phone: true } } },
     orderBy: { occurredAt: "desc" },
   });

@@ -51,6 +51,15 @@ export function getUtcDayRange(labelDate: Date, timeZone: string): { start: Date
   return { start, end };
 }
 
+// Real UTC instant range [start, end) covering label dates `since`..`until`
+// (inclusive) in `timeZone` — what GHL order queries must use. Treating a
+// label date as a plain UTC instant (as `occurredAt: { gte: since }` does)
+// shifts the window by the timezone offset, so a "yesterday" filter would
+// show orders from 5pm two days ago to 5pm yesterday (Los Angeles).
+export function getUtcRangeForLabels(since: Date, until: Date, timeZone: string): { start: Date; end: Date } {
+  return { start: getUtcDayRange(since, timeZone).start, end: getUtcDayRange(until, timeZone).end };
+}
+
 // Finds the UTC instant at which the wall clock in `timeZone` reads
 // Y-M-D 00:00:00, by taking a naive UTC guess and correcting for that
 // timezone's offset at that moment (handles DST correctly for all but the
