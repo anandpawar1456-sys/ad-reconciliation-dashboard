@@ -92,6 +92,7 @@ export type AdHistory = {
   last7: AdTotals;
   daily: AdDailyRow[];
   verdict: Verdict;
+  timeZone: string;
   customers: Array<{ orderId: string; when: Date; email: string | null; amount: number; funnel: string | null }>;
 };
 
@@ -250,6 +251,7 @@ export async function getAdHistory(adId: string): Promise<AdHistory | null> {
     last7,
     daily,
     verdict: judge(lifetime, last7),
+    timeZone,
     customers: orders.slice(0, 50).map((o) => ({
       orderId: o.id,
       when: o.occurredAt,

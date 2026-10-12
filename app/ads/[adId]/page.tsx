@@ -54,6 +54,15 @@ export default async function AdHistoryPage({ params }: { params: { adId: string
           </ul>
         </div>
 
+        {L.metaRevenue - L.ghlRevenue >= 1 && (
+          <p className="mt-4 rounded-xl bg-indigo-50 px-4 py-3 text-sm text-ink-700">
+            Meta credits this ad with {formatCurrency(L.metaRevenue)} but only {formatCurrency(L.ghlRevenue)} of GHL
+            sales are tied to it. The rest are real GHL orders whose buyers reached checkout without ad tracking in
+            the URL, so GHL can&apos;t say which ad they came from. The tool matches those back to ads by amount and day
+            when the match is unambiguous; any still unmatched are counted by Meta but not shown here.
+          </p>
+        )}
+
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           <Tile label="Spend" value={formatCurrency(L.spend)} />
           <Tile label="Meta revenue" value={formatCurrency(L.metaRevenue)} sub={`${L.metaPurchases} purchases · ${formatRoas(L.metaRoas)}`} />
@@ -155,7 +164,7 @@ export default async function AdHistoryPage({ params }: { params: { adId: string
                 {ad.customers.map((c) => (
                   <tr key={c.orderId} className="border-b border-ink-900/5 last:border-0">
                     <td className="py-2 pr-4 text-ink-400">
-                      {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(c.when)}
+                      {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: ad.timeZone }).format(c.when)}
                     </td>
                     <td className="py-2 pr-4 font-medium text-ink-900">{c.email ?? "Unknown contact"}</td>
                     <td className="py-2 pr-4 text-ink-700">{c.funnel ?? "—"}</td>

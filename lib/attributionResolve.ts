@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { inferContactsFromMetaDeficits } from "@/lib/attributionInfer";
 
 type AdRow = { id: string; name: string; adsetId: string; campaignId: string };
 
@@ -106,5 +107,9 @@ export async function resolveUnattributedContacts(): Promise<string[]> {
     );
   }
 
-  return changed.map((c) => c.id);
+  // Then, for buyers who arrived with no tracking at all, match what Meta
+  // credited an ad against that day's unattributed GHL orders.
+  const inferred = await inferContactsFromMetaDeficits();
+
+  return [...changed.map((c) => c.id), ...inferred];
 }

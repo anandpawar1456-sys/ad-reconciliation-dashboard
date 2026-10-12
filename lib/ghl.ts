@@ -53,7 +53,11 @@ export function extractAttribution(contact: any): GhlAttribution {
   const urlParams = parseQueryParams(source.url);
 
   return {
-    fbclid: source.fbclid ?? urlParams.fbclid,
+    // `fbc` is Meta's click cookie ("fb.1.<timestamp>.<fbclid>"). Buyers who
+    // reach checkout with a bare URL still carry it, which is the only sign
+    // they came from a Meta ad.
+    fbclid:
+      source.fbclid ?? urlParams.fbclid ?? fbclidFromFbc(source.fbc) ?? fbclidFromFbc(first.fbc) ?? fbclidFromFbc(last.fbc),
     utmSource: source.utmSource,
     utmMedium: source.utmMedium,
     utmCampaign: source.campaign,
@@ -63,6 +67,11 @@ export function extractAttribution(contact: any): GhlAttribution {
     adsetId: urlParams.adset_id,
     campaignId: urlParams.utm_id ?? urlParams.campaign_id,
   };
+}
+
+function fbclidFromFbc(fbc: string | undefined): string | undefined {
+  const parts = fbc?.split(".");
+  return parts && parts.length >= 4 && parts[0] === "fb" ? parts.slice(3).join(".") : undefined;
 }
 
 function parseQueryParams(url: string | undefined): Record<string, string> {
