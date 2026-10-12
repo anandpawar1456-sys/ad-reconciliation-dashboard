@@ -12,6 +12,9 @@ const PUBLIC_PATHS = [
   "/api/webhooks/ghl",
   "/api/track",
   "/track.js",
+  "/logo.png",
+  "/icon.png",
+  "/apple-icon.png",
   "/api/cron",
 ];
 

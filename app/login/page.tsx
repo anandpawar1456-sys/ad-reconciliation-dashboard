@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 
 export default function LoginPage() {
   return (
@@ -43,7 +44,7 @@ function LoginForm() {
     <main className="flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-sm">
         <div className="glass-panel px-8 py-10">
-          <div className="mx-auto h-11 w-11 rounded-2xl bg-aurora-full shadow-glow" />
+          <Image src="/logo.png" alt="" width={64} height={64} priority className="mx-auto h-16 w-16" />
           <h1 className="mt-5 text-center text-xl font-bold tracking-tight text-ink-900">
             Welcome back
           </h1>

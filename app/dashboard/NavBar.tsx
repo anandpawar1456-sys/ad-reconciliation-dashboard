@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import LogoutButton from "./LogoutButton";
@@ -28,7 +29,7 @@ export default function NavBar() {
     <header className="glass-nav sticky top-0 z-10">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3.5 sm:px-6">
         <div className="flex items-center gap-2.5">
-          <div className="h-7 w-7 shrink-0 rounded-xl bg-aurora-full shadow-glow" />
+          <Image src="/logo.png" alt="" width={32} height={32} priority className="h-8 w-8 shrink-0" />
           <span className="text-sm font-bold tracking-tight text-ink-900">Reconciliation</span>
         </div>
 
