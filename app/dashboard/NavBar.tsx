@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/dashboard", label: "Overview" },
   { href: "/reconciliation", label: "Reconciliation" },
   { href: "/campaigns", label: "Campaigns" },
+  { href: "/ads", label: "Ad Lookup" },
   { href: "/true-roas", label: "True ROAS" },
   { href: "/funnel", label: "Funnel" },
   { href: "/missing-transactions", label: "Missing" },
