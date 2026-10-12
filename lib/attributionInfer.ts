@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { getUtcDayRange, toLocalDateLabel, DEFAULT_TIMEZONE } from "@/lib/timezone";
-import { isExcludedCampaignName } from "@/lib/excludedCampaigns";
+import { isExcludedCampaignName, notExcludedCustomer } from "@/lib/excludedCampaigns";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CENTS = 0.01;
@@ -30,7 +30,7 @@ export async function planInference(daysBack = 45): Promise<Map<string, Inferred
 
   const [orders, insights] = await Promise.all([
     prisma.ghlOrder.findMany({
-      where: { occurredAt: { gte: range.start, lt: range.end }, status: "completed" },
+      where: { ...notExcludedCustomer, occurredAt: { gte: range.start, lt: range.end }, status: "completed" },
       select: { id: true, contactId: true, amount: true, occurredAt: true, contact: { select: { adId: true } } },
     }),
     prisma.metaInsight.findMany({

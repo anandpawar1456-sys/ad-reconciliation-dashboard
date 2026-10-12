@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
-import { isExcludedCampaignName, notExcludedCampaignName } from "@/lib/excludedCampaigns";
+import { isExcludedCampaignName, notExcludedCampaignName, notExcludedCustomer } from "@/lib/excludedCampaigns";
 import { getUtcRangeForLabels, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
 // GHL orders carry real UTC instants, so a label-date range has to be
@@ -139,8 +139,7 @@ async function getHierarchySummaries(
   const contactField = level === "campaign" ? "campaignId" : level === "adset" ? "adsetId" : "adId";
   const orderRange = await getOrderRange(since, until);
   const ghlOrders = await prisma.ghlOrder.findMany({
-    where: {
-      occurredAt: { gte: orderRange.start, lt: orderRange.end },
+    where: { ...notExcludedCustomer, occurredAt: { gte: orderRange.start, lt: orderRange.end },
       status: "completed",
       contact: parentId
         ? level === "adset"
@@ -257,7 +256,7 @@ export type AdCustomer = {
 export async function getAdCustomers(adId: string, since: Date, until: Date): Promise<AdCustomer[]> {
   const orderRange = await getOrderRange(since, until);
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: orderRange.start, lt: orderRange.end }, contact: { adId } },
+    where: { ...notExcludedCustomer, occurredAt: { gte: orderRange.start, lt: orderRange.end }, contact: { adId } },
     include: { contact: { select: { email: true, phone: true } } },
     orderBy: { occurredAt: "desc" },
   });

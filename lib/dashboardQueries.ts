@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { notExcludedCustomer } from "@/lib/excludedCampaigns";
 import { toLocalDateLabel, getUtcRangeForLabels, DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { getSettings } from "@/lib/settings";
 
@@ -93,7 +94,7 @@ export async function getFunnelsBreakdown(since: Date, until: Date): Promise<Fun
   const settings = await getSettings();
   const range = getUtcRangeForLabels(since, until, settings.reportingTimezone || DEFAULT_TIMEZONE);
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: range.start, lt: range.end }, status: "completed" },
+    where: { ...notExcludedCustomer, occurredAt: { gte: range.start, lt: range.end }, status: "completed" },
     select: { sourceName: true, sourceStepId: true, amount: true },
   });
 
@@ -174,7 +175,7 @@ export async function getOverviewData(since: Date, until: Date): Promise<Overvie
     }),
     prisma.adAttribution.findMany({ where: { date: { gte: since, lt: untilExclusive } } }),
     prisma.ghlOrder.findMany({
-      where: { occurredAt: { gte: orderRange.start, lt: orderRange.end }, status: "completed" },
+      where: { ...notExcludedCustomer, occurredAt: { gte: orderRange.start, lt: orderRange.end }, status: "completed" },
       select: { amount: true, contact: { select: { fbclid: true, utmSource: true, adId: true } } },
     }),
   ]);
@@ -245,7 +246,7 @@ export async function getHourlyGhlRevenue(dayLabel: Date, timeZone: string): Pro
   const { start, end } = getUtcDayRange(dayLabel, timeZone);
 
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: start, lt: end }, status: "completed" },
+    where: { ...notExcludedCustomer, occurredAt: { gte: start, lt: end }, status: "completed" },
     select: { amount: true, occurredAt: true },
   });
 
@@ -272,7 +273,7 @@ export async function getDayTransactions(dayLabel: Date, timeZone: string): Prom
   const { start, end } = getUtcDayRange(dayLabel, timeZone);
 
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: start, lt: end }, status: "completed" },
+    where: { ...notExcludedCustomer, occurredAt: { gte: start, lt: end }, status: "completed" },
     include: { contact: true },
     orderBy: { occurredAt: "desc" },
   });
@@ -312,7 +313,7 @@ export type RangeTransaction = {
 export async function getRangeTransactions(since: Date, until: Date, timeZone: string): Promise<RangeTransaction[]> {
   const range = getUtcRangeForLabels(since, until, timeZone);
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: range.start, lt: range.end }, status: "completed" },
+    where: { ...notExcludedCustomer, occurredAt: { gte: range.start, lt: range.end }, status: "completed" },
     include: { contact: true },
     orderBy: { occurredAt: "desc" },
     take: 500,

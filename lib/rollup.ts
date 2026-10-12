@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { GhlOrder, GhlContact, MetaInsight } from "@prisma/client";
 import { getSettings } from "@/lib/settings";
 import { getUtcDayRange, DEFAULT_TIMEZONE } from "@/lib/timezone";
-import { EXCLUDED_CAMPAIGN_KEYWORDS, notExcludedCampaignName } from "@/lib/excludedCampaigns";
+import { EXCLUDED_CAMPAIGN_KEYWORDS, notExcludedCampaignName, notExcludedCustomer } from "@/lib/excludedCampaigns";
 
 // Only orders in these statuses count as real revenue. Confirmed against
 // this account's actual order history (1564 orders sampled): GHL's
@@ -26,7 +26,7 @@ export async function computeDailyRollup(labelDate: Date): Promise<void> {
   const { start, end } = getUtcDayRange(labelDate, timeZone);
 
   const orders = await prisma.ghlOrder.findMany({
-    where: { occurredAt: { gte: start, lt: end }, status: { in: COUNTED_STATUSES } },
+    where: { ...notExcludedCustomer, occurredAt: { gte: start, lt: end }, status: { in: COUNTED_STATUSES } },
     include: { contact: true },
   });
 

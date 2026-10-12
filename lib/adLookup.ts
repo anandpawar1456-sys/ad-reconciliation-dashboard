@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { notExcludedCustomer } from "@/lib/excludedCampaigns";
 import { getSettings } from "@/lib/settings";
 import { toLocalDateLabel, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
@@ -179,7 +180,7 @@ export async function getAdHistory(adId: string): Promise<AdHistory | null> {
     // ad_id URL parameter or recovered from UTM ids/names (see
     // lib/attributionResolve.ts).
     prisma.ghlOrder.findMany({
-      where: { contact: { adId }, status: "completed" },
+      where: { ...notExcludedCustomer, contact: { adId }, status: "completed" },
       include: { contact: { select: { email: true } } },
       orderBy: { occurredAt: "desc" },
     }),
