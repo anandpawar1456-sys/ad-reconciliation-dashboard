@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import NavBar from "../../dashboard/NavBar";
 import StatusBadge from "../../campaigns/StatusBadge";
-import { getAdHistory, type AdTotals, type Verdict } from "@/lib/adLookup";
+import { getAdHistory, type AdHistory, type AdTotals, type Verdict } from "@/lib/adLookup";
 import { formatCurrency, formatRoas, formatCpa, formatLabelDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,7 @@ export default async function AdHistoryPage({ params }: { params: { adId: string
   if (!ad) notFound();
 
   const L = ad.lifetime;
+  const streakDays = salesStreakDays(ad.daily);
   const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
   return (
@@ -90,6 +91,11 @@ export default async function AdHistoryPage({ params }: { params: { adId: string
 
         <div className="mt-5 section-card overflow-x-auto">
           <h2 className="text-sm font-semibold text-ink-900">Day by day</h2>
+          <p className="mt-1 text-xs text-ink-400">
+            <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800">Green</span> = part of a
+            run of {MIN_STREAK}+ days in a row with sales. ROAS turns green only when it is above 1x inside such a run;
+            one day without a sale breaks the run.
+          </p>
           {ad.daily.length === 0 ? (
             <p className="py-8 text-center text-sm text-ink-400">No daily data yet.</p>
           ) : (
@@ -111,11 +117,23 @@ export default async function AdHistoryPage({ params }: { params: { adId: string
                   <tr key={d.date.toISOString()} className="border-b border-ink-900/5 last:border-0">
                     <td className="py-2 pr-4 font-medium text-ink-900">{formatLabelDate(d.date)}</td>
                     <td className="py-2 pr-4 text-ink-700">{formatCurrency(d.spend)}</td>
-                    <td className="py-2 pr-4 text-ink-700">{d.metaPurchases}</td>
+                    <td className="py-2 pr-4">
+                      <Cell hot={streakDays.has(d.date.toISOString()) && d.metaPurchases > 0}>{d.metaPurchases}</Cell>
+                    </td>
                     <td className="py-2 pr-4 text-ink-700">{formatCurrency(d.metaRevenue)}</td>
-                    <td className="py-2 pr-4 text-ink-700">{d.ghlOrders}</td>
+                    <td className="py-2 pr-4">
+                      <Cell hot={streakDays.has(d.date.toISOString()) && d.ghlOrders > 0}>{d.ghlOrders}</Cell>
+                    </td>
                     <td className="py-2 pr-4 text-ink-700">{formatCurrency(d.ghlRevenue)}</td>
-                    <td className="py-2 pr-4 font-semibold text-ink-900">{formatRoas(d.spend > 0 ? d.trueRevenue / d.spend : null)}</td>
+                    <td className="py-2 pr-4 font-semibold">
+                      <Cell
+                        hot={
+                          streakDays.has(d.date.toISOString()) && d.spend > 0 && d.trueRevenue / d.spend > 1
+                        }
+                      >
+                        {formatRoas(d.spend > 0 ? d.trueRevenue / d.spend : null)}
+                      </Cell>
+                    </td>
                     <td className="py-2 text-ink-700">{formatCpa(d.metaPurchases > 0 ? d.spend / d.metaPurchases : null)}</td>
                   </tr>
                 ))}
@@ -161,6 +179,44 @@ export default async function AdHistoryPage({ params }: { params: { adId: string
         )}
       </main>
     </div>
+  );
+}
+
+const MIN_STREAK = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Dates that belong to a run of MIN_STREAK or more consecutive calendar days
+// that each had a sale (Meta purchase or GHL order). A day with no sale — or
+// no row at all — ends the run.
+function salesStreakDays(daily: AdHistory["daily"]): Set<string> {
+  const hot = new Set<string>();
+  let run: string[] = [];
+  let prev: number | null = null;
+  for (const d of [...daily].sort((a, b) => a.date.getTime() - b.date.getTime())) {
+    const hasSale = d.metaPurchases > 0 || d.ghlOrders > 0;
+    const t = d.date.getTime();
+    if (!hasSale || prev === null || t - prev !== DAY_MS) {
+      if (run.length >= MIN_STREAK) run.forEach((k) => hot.add(k));
+      run = [];
+    }
+    if (hasSale) {
+      run.push(d.date.toISOString());
+      prev = t;
+    } else {
+      prev = null;
+    }
+  }
+  if (run.length >= MIN_STREAK) run.forEach((k) => hot.add(k));
+  return hot;
+}
+
+function Cell({ hot, children }: { hot: boolean; children: React.ReactNode }) {
+  return hot ? (
+    <span className="inline-block min-w-[3rem] rounded-md bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">
+      {children}
+    </span>
+  ) : (
+    <span className="text-ink-700">{children}</span>
   );
 }
 
