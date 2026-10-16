@@ -352,7 +352,14 @@ export type YesterdaySnapshot = {
   hasData: boolean;
   profit: number;
   ghlRevenue: number;
+  ghlOrders: number;
   metaSpend: number;
+  metaPurchases: number;
+  metaRevenue: number;
+  recoveredRevenue: number;
+  trueRoas: number | null;
+  cpa: number | null;
+  previousProfit: number | null; // the day before yesterday, for a quick compare
   bestAd: {
     name: string;
     trueRevenue: number;
@@ -371,14 +378,25 @@ export async function getYesterdaySnapshot(timeZone: string): Promise<YesterdayS
   const today = toLocalDateLabel(new Date(), timeZone);
   const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
 
-  const [reconciliation, attributionRows] = await Promise.all([
+  const dayBefore = new Date(yesterday.getTime() - 24 * 60 * 60 * 1000);
+
+  const [reconciliation, attributionRows, prevReconciliation, prevAttribution] = await Promise.all([
     prisma.dailyReconciliation.findFirst({ where: { date: yesterday } }),
     prisma.adAttribution.findMany({ where: { date: yesterday } }),
+    prisma.dailyReconciliation.findFirst({ where: { date: dayBefore } }),
+    prisma.adAttribution.findMany({ where: { date: dayBefore }, select: { metaSpend: true } }),
   ]);
 
   const ghlRevenue = Number(reconciliation?.ghlRevenue ?? 0);
   const metaSpend = attributionRows.reduce((sum, r) => sum + Number(r.metaSpend), 0);
   const profit = ghlRevenue - metaSpend;
+  const trueRevenue = attributionRows.reduce((sum, r) => sum + Number(r.trueRevenue), 0);
+  const recoveredRevenue = attributionRows.reduce((sum, r) => sum + Number(r.recoveredRevenue), 0);
+  const metaPurchases = reconciliation?.metaPurchases ?? 0;
+  const previousProfit =
+    prevReconciliation || prevAttribution.length > 0
+      ? Number(prevReconciliation?.ghlRevenue ?? 0) - prevAttribution.reduce((sum, r) => sum + Number(r.metaSpend), 0)
+      : null;
 
   let bestAd: YesterdaySnapshot["bestAd"] = null;
   for (const row of attributionRows) {
@@ -401,7 +419,14 @@ export async function getYesterdaySnapshot(timeZone: string): Promise<YesterdayS
     hasData: !!reconciliation || attributionRows.length > 0,
     profit,
     ghlRevenue,
+    ghlOrders: reconciliation?.ghlTransactions ?? 0,
     metaSpend,
+    metaPurchases,
+    metaRevenue: Number(reconciliation?.metaRevenue ?? 0),
+    recoveredRevenue,
+    trueRoas: metaSpend > 0 ? trueRevenue / metaSpend : null,
+    cpa: metaPurchases > 0 ? metaSpend / metaPurchases : null,
+    previousProfit,
     bestAd,
   };
 }

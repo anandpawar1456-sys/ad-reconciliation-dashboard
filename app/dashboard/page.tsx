@@ -164,8 +164,8 @@ function getGreeting(timeZone: string): string {
 
 const whole = (n: number) => `$${Math.round(Math.abs(n)).toLocaleString("en-US")}`;
 
-// Soft rounded font (Nunito, loaded in the root layout) and as few words as
-// possible: one headline number plus three small facts.
+// Greeting card: headline profit on the left, six small facts on the right
+// and the best ad underneath. Plus Jakarta Sans (the site font) throughout.
 function GreetingBanner({
   greeting,
   yesterday,
@@ -174,40 +174,64 @@ function GreetingBanner({
   yesterday: YesterdaySnapshot;
 }) {
   const profitPositive = yesterday.profit >= 0;
-  const dateLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(
+  const dateLabel = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" }).format(
     yesterday.dateLabel
   );
+  const delta = yesterday.previousProfit === null ? null : yesterday.profit - yesterday.previousProfit;
 
   return (
-    <div
-      className="section-card bg-gradient-to-br from-indigo-50 via-white to-pink-50"
-      style={{ fontFamily: "var(--font-nunito), ui-rounded, system-ui, sans-serif" }}
-    >
-      <h1 className="text-2xl font-extrabold tracking-normal !text-ink-900 [text-shadow:none]">{greeting}</h1>
+    <div className="section-card bg-gradient-to-br from-indigo-50 via-white to-pink-50 !p-6 sm:!p-7">
+      <h1 className="text-3xl font-extrabold tracking-tight !text-ink-900 ![text-shadow:none]">{greeting}</h1>
       {!yesterday.hasData ? (
         <p className="mt-1 text-sm font-medium !text-ink-400">No data for yesterday yet.</p>
       ) : (
         <>
-          <p className="mt-1 text-sm font-semibold !text-ink-400">Yesterday, {dateLabel}</p>
-          <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-3">
+          <p className="mt-1 text-sm font-medium !text-ink-400">Yesterday, {dateLabel}</p>
+
+          <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(220px,1fr)_2fr] lg:items-center">
             <div>
               <div
-                className={`text-3xl font-extrabold leading-none ${profitPositive ? "text-emerald-500" : "text-rose-500"}`}
+                className={`text-5xl font-extrabold leading-none tracking-tight ${
+                  profitPositive ? "text-emerald-500" : "text-rose-500"
+                }`}
               >
                 {profitPositive ? "+" : "-"}
                 {whole(yesterday.profit)}
               </div>
-              <div className="mt-1 text-xs font-semibold text-ink-400">{profitPositive ? "profit" : "loss"}</div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-ink-400">
+                <span>{profitPositive ? "profit" : "loss"}</span>
+                {delta !== null && (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                      delta >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                    }`}
+                  >
+                    {delta >= 0 ? "▲" : "▼"} {whole(delta)} vs day before
+                  </span>
+                )}
+              </div>
             </div>
-            <Fact value={whole(yesterday.ghlRevenue)} label="revenue" />
-            <Fact value={whole(yesterday.metaSpend)} label="ad spend" />
-            {yesterday.bestAd && (
-              <Fact
-                value={yesterday.bestAd.name}
-                label={`best ad${yesterday.bestAd.trueRoas !== null ? `, ${yesterday.bestAd.trueRoas.toFixed(1)}x` : ""}`}
-              />
-            )}
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
+              <Fact value={whole(yesterday.ghlRevenue)} label="revenue" />
+              <Fact value={whole(yesterday.metaSpend)} label="ad spend" />
+              <Fact value={yesterday.trueRoas !== null ? `${yesterday.trueRoas.toFixed(2)}x` : "-"} label="true ROAS" />
+              <Fact value={String(yesterday.ghlOrders)} label="orders" />
+              <Fact value={yesterday.cpa !== null ? `$${yesterday.cpa.toFixed(2)}` : "-"} label="CPA" />
+              <Fact value={whole(yesterday.recoveredRevenue)} label="recovered" />
+            </div>
           </div>
+
+          {yesterday.bestAd && (
+            <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-ink-900/[0.04] px-4 py-3">
+              <span className="text-xs font-bold uppercase tracking-wide text-ink-400">Best ad</span>
+              <span className="text-base font-bold text-ink-900">{yesterday.bestAd.name}</span>
+              <span className="text-sm font-semibold text-emerald-600">
+                +{whole(yesterday.bestAd.profit)}
+                {yesterday.bestAd.trueRoas !== null && ` · ${yesterday.bestAd.trueRoas.toFixed(1)}x`}
+              </span>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -217,8 +241,8 @@ function GreetingBanner({
 function Fact({ value, label }: { value: string; label: string }) {
   return (
     <div>
-      <div className="text-lg font-bold leading-none text-ink-900">{value}</div>
-      <div className="mt-1 text-xs font-semibold text-ink-400">{label}</div>
+      <div className="text-xl font-extrabold leading-none tracking-tight text-ink-900">{value}</div>
+      <div className="mt-1.5 text-xs font-semibold text-ink-400">{label}</div>
     </div>
   );
 }

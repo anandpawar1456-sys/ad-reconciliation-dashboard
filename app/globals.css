@@ -9,7 +9,7 @@
 body {
   font-family: var(--font-sans);
   color: #1e1b2e;
-  background-color: #35357f; /* shows only while the fixed scene (SceneBackground) loads */
+  background-color: #0e2a47; /* shows only while the fixed scene (SceneBackground) loads */
   min-height: 100vh;
 }
 
@@ -40,7 +40,7 @@ body {
   }
 
   .glass-nav {
-    @apply border-b border-white/10 bg-[#14112f]/60 backdrop-blur-xl;
+    @apply border-b border-white/10 bg-[#0b2230]/60 backdrop-blur-xl;
   }
 
   .field-input {

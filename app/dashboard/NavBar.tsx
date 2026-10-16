@@ -75,7 +75,7 @@ export default function NavBar() {
       </div>
 
       {open && (
-        <nav className="border-t border-white/10 bg-[#14112f]/95 px-4 py-3 backdrop-blur-xl md:hidden">
+        <nav className="border-t border-white/10 bg-[#0b2230]/95 px-4 py-3 backdrop-blur-xl md:hidden">
           <div className="flex flex-col gap-1">
             {LINKS.map((link) => (
               <Link
