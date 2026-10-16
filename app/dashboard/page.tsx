@@ -254,16 +254,26 @@ function Fact({
 }) {
   const t = FACT_TONES[tone];
   return (
-    <div className={`relative overflow-hidden rounded-3xl bg-gradient-to-br px-5 py-5 ${t.tile}`}>
-      <Spark values={trend} color={t.color} id={`spark-${label.replace(/\W/g, "")}`} fillOpacity={0.6} amplitude={0.55} className="absolute bottom-0 right-0 h-[55%] w-[66%]" />
+    <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br px-4 py-3 ${t.tile}`}>
+      <Spark
+        values={trend}
+        color={t.color}
+        id={`spark-${label.replace(/\W/g, "")}`}
+        fillOpacity={0.6}
+        amplitude={0.55}
+        className="absolute bottom-0 right-0 h-[60%] w-[60%]"
+      />
       <div className="relative">
-        <div className="text-3xl font-extrabold leading-none tracking-tight text-ink-900">{value}</div>
-        <div className="mt-2.5 text-xs font-bold uppercase tracking-[0.14em] text-ink-400">{label}</div>
+        <div className="text-2xl font-extrabold leading-none tracking-tight text-ink-900">{value}</div>
+        <div className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-400">{label}</div>
       </div>
     </div>
   );
 }
 
+// Compact greeting card (about half the height of the first version): the
+// title row carries the date and the best-ad link, and the body is a single
+// profit block beside the six stat tiles.
 function GreetingBanner({
   greeting,
   yesterday,
@@ -272,7 +282,7 @@ function GreetingBanner({
   yesterday: YesterdaySnapshot;
 }) {
   const profitPositive = yesterday.profit >= 0;
-  const dateLabel = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" }).format(
+  const dateLabel = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(
     yesterday.dateLabel
   );
   const delta = yesterday.previousProfit === null ? null : yesterday.profit - yesterday.previousProfit;
@@ -280,28 +290,60 @@ function GreetingBanner({
   const profitColor = profitPositive ? "#10b981" : "#f43f5e";
 
   return (
-    <div className="section-card bg-gradient-to-br from-white via-white to-indigo-50/60 !p-6 sm:!p-8">
-      <h1 className="text-3xl font-extrabold tracking-tight !text-ink-900 ![text-shadow:none]">{greeting}</h1>
+    <div className="section-card bg-gradient-to-br from-white via-white to-indigo-50/60 !p-5">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-baseline gap-x-3">
+          <h1 className="text-2xl font-extrabold tracking-tight !text-ink-900 ![text-shadow:none]">{greeting}</h1>
+          {yesterday.hasData && (
+            <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-ink-400">Yesterday, {dateLabel}</span>
+          )}
+        </div>
+
+        {yesterday.hasData && yesterday.bestAd && (
+          <Link
+            href={`/ads/${yesterday.bestAd.adId}`}
+            title="Open in Ad Lookup"
+            className="flex max-w-full items-center gap-2.5 rounded-full bg-gradient-to-r from-indigo-50 to-violet-100/80 px-4 py-1.5 text-sm transition hover:shadow-md"
+          >
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-400">Best ad</span>
+            <span className="truncate font-extrabold text-ink-900">{yesterday.bestAd.name}</span>
+            <span className="shrink-0 font-bold text-emerald-600">
+              +{whole(yesterday.bestAd.profit)}
+              {yesterday.bestAd.trueRoas !== null && ` · ${yesterday.bestAd.trueRoas.toFixed(1)}x`}
+            </span>
+            <span className="shrink-0 text-indigo-500">→</span>
+          </Link>
+        )}
+      </div>
+
       {!yesterday.hasData ? (
         <p className="mt-1 text-sm font-medium !text-ink-400">No data for yesterday yet.</p>
       ) : (
-        <>
-          <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(280px,5fr)_7fr]">
-            <div className="relative min-h-[270px]">
-              <div className="relative z-10">
-                <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-ink-400">Yesterday, {dateLabel}</div>
-                <div
-                  className={`mt-5 text-6xl font-extrabold leading-none tracking-tight sm:text-7xl ${
-                    profitPositive ? "text-emerald-600" : "text-rose-500"
-                  }`}
-                >
-                  {profitPositive ? "+" : "-"}
-                  {whole(yesterday.profit)}
-                </div>
-                <div className="mt-2 text-lg font-semibold text-ink-700">{profitPositive ? "Profit" : "Loss"}</div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(260px,4fr)_8fr] lg:items-stretch">
+          <div className="relative flex min-h-[132px] flex-col justify-center">
+            <Spark
+              values={T.profit}
+              color={profitColor}
+              id="spark-profit"
+              line
+              dot
+              fillOpacity={0.35}
+              className="absolute bottom-0 right-0 h-[70%] w-[48%]"
+            />
+            <div className="relative z-10">
+              <div
+                className={`text-5xl font-extrabold leading-none tracking-tight sm:text-6xl ${
+                  profitPositive ? "text-emerald-600" : "text-rose-500"
+                }`}
+              >
+                {profitPositive ? "+" : "-"}
+                {whole(yesterday.profit)}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-base font-semibold text-ink-700">{profitPositive ? "Profit" : "Loss"}</span>
                 {delta !== null && (
                   <span
-                    className={`mt-3 inline-block rounded-full px-3.5 py-1.5 text-sm font-bold ${
+                    className={`rounded-full px-2.5 py-1 text-xs font-bold ${
                       delta >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
                     }`}
                   >
@@ -309,58 +351,23 @@ function GreetingBanner({
                   </span>
                 )}
               </div>
-              <Spark
-                values={T.profit}
-                color={profitColor}
-                id="spark-profit"
-                line
-                dot
-                fillOpacity={0.4}
-                className="absolute bottom-0 left-0 right-0 h-[52%]"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Fact value={whole(yesterday.ghlRevenue)} label="Revenue" tone="indigo" trend={T.revenue} />
-              <Fact value={whole(yesterday.metaSpend)} label="Ad spend" tone="pink" trend={T.spend} />
-              <Fact
-                value={yesterday.trueRoas !== null ? `${yesterday.trueRoas.toFixed(2)}x` : "-"}
-                label="True ROAS"
-                tone="violet"
-                trend={T.trueRoas}
-              />
-              <Fact value={String(yesterday.ghlOrders)} label="Orders" tone="sky" trend={T.orders} />
-              <Fact value={yesterday.cpa !== null ? `$${yesterday.cpa.toFixed(2)}` : "-"} label="CPA" tone="amber" trend={T.cpa} />
-              <Fact value={whole(yesterday.recoveredRevenue)} label="Recovered" tone="emerald" trend={T.recovered} />
             </div>
           </div>
 
-          {yesterday.bestAd && (
-            <Link
-              href={`/ads/${yesterday.bestAd.adId}`}
-              className="group relative mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 overflow-hidden rounded-3xl bg-gradient-to-r from-slate-50 via-indigo-50/70 to-violet-100/70 px-6 py-5 transition hover:shadow-md"
-            >
-              <Spark
-                values={yesterday.bestAd.trend}
-                color="#a78bfa"
-                id="spark-bestad"
-                fillOpacity={0.55}
-                amplitude={0.6}
-                className="absolute bottom-0 right-0 h-full w-1/3"
-              />
-              <span className="relative text-xs font-bold uppercase tracking-[0.18em] text-ink-400">Best ad</span>
-              <span className="relative hidden h-6 w-px bg-ink-900/15 sm:block" />
-              <span className="relative text-lg font-extrabold tracking-tight text-ink-900">{yesterday.bestAd.name}</span>
-              <span className="relative text-base font-bold text-emerald-600">
-                +{whole(yesterday.bestAd.profit)}
-                {yesterday.bestAd.trueRoas !== null && ` · ${yesterday.bestAd.trueRoas.toFixed(1)}x`}
-              </span>
-              <span className="relative ml-auto text-sm font-semibold text-indigo-500 opacity-0 transition group-hover:opacity-100">
-                Open in Ad Lookup →
-              </span>
-            </Link>
-          )}
-        </>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Fact value={whole(yesterday.ghlRevenue)} label="Revenue" tone="indigo" trend={T.revenue} />
+            <Fact value={whole(yesterday.metaSpend)} label="Ad spend" tone="pink" trend={T.spend} />
+            <Fact
+              value={yesterday.trueRoas !== null ? `${yesterday.trueRoas.toFixed(2)}x` : "-"}
+              label="True ROAS"
+              tone="violet"
+              trend={T.trueRoas}
+            />
+            <Fact value={String(yesterday.ghlOrders)} label="Orders" tone="sky" trend={T.orders} />
+            <Fact value={yesterday.cpa !== null ? `$${yesterday.cpa.toFixed(2)}` : "-"} label="CPA" tone="amber" trend={T.cpa} />
+            <Fact value={whole(yesterday.recoveredRevenue)} label="Recovered" tone="emerald" trend={T.recovered} />
+          </div>
+        </div>
       )}
     </div>
   );
