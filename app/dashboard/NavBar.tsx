@@ -30,7 +30,7 @@ export default function NavBar() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3.5 sm:px-6">
         <div className="flex items-center gap-2.5">
           <Image src="/logo.png" alt="" width={32} height={32} priority className="h-8 w-8 shrink-0" />
-          <span className="text-sm font-bold tracking-tight text-ink-900">Reconciliation</span>
+          <span className="text-sm font-bold tracking-tight text-white">Reconciliation</span>
         </div>
 
         {/* Desktop nav — hidden below md, where it's replaced by the
@@ -44,13 +44,13 @@ export default function NavBar() {
               className={`whitespace-nowrap rounded-xl px-3 py-1.5 text-sm font-medium transition ${
                 isActive(link.href)
                   ? "bg-white text-ink-900 shadow-sm"
-                  : "text-ink-500 hover:bg-white/60 hover:text-ink-900"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
               {link.label}
             </Link>
           ))}
-          <div className="ml-2 shrink-0 border-l border-ink-900/10 pl-2">
+          <div className="ml-2 shrink-0 border-l border-white/15 pl-2">
             <LogoutButton />
           </div>
         </nav>
@@ -60,7 +60,7 @@ export default function NavBar() {
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-600 transition hover:bg-white/60 md:hidden"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white transition hover:bg-white/10 md:hidden"
         >
           {open ? (
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -75,7 +75,7 @@ export default function NavBar() {
       </div>
 
       {open && (
-        <nav className="border-t border-ink-900/10 bg-white/95 px-4 py-3 backdrop-blur-xl md:hidden">
+        <nav className="border-t border-white/10 bg-[#14112f]/95 px-4 py-3 backdrop-blur-xl md:hidden">
           <div className="flex flex-col gap-1">
             {LINKS.map((link) => (
               <Link
@@ -83,13 +83,13 @@ export default function NavBar() {
                 href={link.href}
                 onClick={() => setOpen(false)}
                 className={`rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                  isActive(link.href) ? "bg-white text-ink-900 shadow-sm" : "text-ink-600 hover:bg-white/60"
+                  isActive(link.href) ? "bg-white text-ink-900 shadow-sm" : "text-white/75 hover:bg-white/10"
                 }`}
               >
                 {link.label}
               </Link>
             ))}
-            <div className="mt-1 border-t border-ink-900/10 pt-2">
+            <div className="mt-1 border-t border-white/10 pt-2">
               <LogoutButton />
             </div>
           </div>

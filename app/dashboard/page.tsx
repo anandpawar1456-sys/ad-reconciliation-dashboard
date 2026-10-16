@@ -174,11 +174,11 @@ function GreetingBanner({
 
   return (
     <div className="section-card bg-gradient-to-br from-indigo-50 via-white to-pink-50">
-      <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">{greeting}!</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight !text-ink-900 [text-shadow:none]">{greeting}!</h1>
       {!yesterday.hasData ? (
-        <p className="mt-1.5 text-sm text-ink-400">No data synced for yesterday ({dateLabel}) yet.</p>
+        <p className="mt-1.5 text-sm !text-ink-400">No data synced for yesterday ({dateLabel}) yet.</p>
       ) : (
-        <p className="mt-1.5 text-sm text-ink-600">
+        <p className="mt-1.5 text-sm !text-ink-700">
           Yesterday ({dateLabel}) you made{" "}
           <span className={`font-bold ${profitPositive ? "text-emerald-600" : "text-rose-600"}`}>
             {profitPositive ? "" : "-"}

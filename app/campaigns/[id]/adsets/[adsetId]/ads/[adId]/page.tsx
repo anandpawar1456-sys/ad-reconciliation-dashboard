@@ -79,7 +79,7 @@ export default async function AdDetailPage({
           <HierarchyTable rows={summaryRow} nameLabel="Ad" />
         </div>
 
-        <h2 className="mt-10 text-lg font-bold tracking-tight text-ink-900">Customers</h2>
+        <h2 className="mt-10 text-lg font-bold tracking-tight !text-white">Customers</h2>
         <p className="mt-1 text-sm text-ink-400">GHL orders attributed to this ad via UTM/ad_id, {resolved.label.toLowerCase()}.</p>
 
         <div className="mt-4 section-card overflow-x-auto">

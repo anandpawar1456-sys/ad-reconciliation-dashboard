@@ -47,7 +47,7 @@ export default async function AdLookupPage({ searchParams }: { searchParams: { q
 
         {results.length > 1 && (
           <div className="mt-6 space-y-3">
-            <p className="text-sm text-ink-400">{results.length} matches — pick one:</p>
+            <p className="text-sm !text-white/80">{results.length} matches — pick one:</p>
             {results.map((r) => (
               <Link key={r.adId} href={`/ads/${r.adId}`} className="section-card block transition hover:shadow-md">
                 <div className="flex flex-wrap items-center justify-between gap-2">
