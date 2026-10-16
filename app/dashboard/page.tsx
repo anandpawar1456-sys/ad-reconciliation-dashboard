@@ -212,13 +212,13 @@ function GreetingBanner({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3">
-              <Fact value={whole(yesterday.ghlRevenue)} label="revenue" />
-              <Fact value={whole(yesterday.metaSpend)} label="ad spend" />
-              <Fact value={yesterday.trueRoas !== null ? `${yesterday.trueRoas.toFixed(2)}x` : "-"} label="true ROAS" />
-              <Fact value={String(yesterday.ghlOrders)} label="orders" />
-              <Fact value={yesterday.cpa !== null ? `$${yesterday.cpa.toFixed(2)}` : "-"} label="CPA" />
-              <Fact value={whole(yesterday.recoveredRevenue)} label="recovered" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Fact value={whole(yesterday.ghlRevenue)} label="revenue" tone="indigo" />
+              <Fact value={whole(yesterday.metaSpend)} label="ad spend" tone="pink" />
+              <Fact value={yesterday.trueRoas !== null ? `${yesterday.trueRoas.toFixed(2)}x` : "-"} label="true ROAS" tone="violet" />
+              <Fact value={String(yesterday.ghlOrders)} label="orders" tone="sky" />
+              <Fact value={yesterday.cpa !== null ? `$${yesterday.cpa.toFixed(2)}` : "-"} label="CPA" tone="amber" />
+              <Fact value={whole(yesterday.recoveredRevenue)} label="recovered" tone="emerald" />
             </div>
           </div>
 
@@ -238,11 +238,22 @@ function GreetingBanner({
   );
 }
 
-function Fact({ value, label }: { value: string; label: string }) {
+const FACT_TONES = {
+  indigo: { tile: "bg-indigo-50 ring-indigo-100", dot: "from-indigo-400 to-blue-500" },
+  pink: { tile: "bg-pink-50 ring-pink-100", dot: "from-fuchsia-400 to-pink-500" },
+  violet: { tile: "bg-violet-50 ring-violet-100", dot: "from-violet-400 to-purple-500" },
+  sky: { tile: "bg-sky-50 ring-sky-100", dot: "from-sky-400 to-cyan-500" },
+  amber: { tile: "bg-amber-50 ring-amber-100", dot: "from-amber-400 to-orange-500" },
+  emerald: { tile: "bg-emerald-50 ring-emerald-100", dot: "from-emerald-400 to-teal-500" },
+} as const;
+
+function Fact({ value, label, tone }: { value: string; label: string; tone: keyof typeof FACT_TONES }) {
+  const t = FACT_TONES[tone];
   return (
-    <div>
-      <div className="text-xl font-extrabold leading-none tracking-tight text-ink-900">{value}</div>
-      <div className="mt-1.5 text-xs font-semibold text-ink-400">{label}</div>
+    <div className={`rounded-2xl px-4 py-3.5 ring-1 ring-inset ${t.tile}`}>
+      <div className={`h-1.5 w-6 rounded-full bg-gradient-to-r ${t.dot}`} />
+      <div className="mt-2.5 text-xl font-extrabold leading-none tracking-tight text-ink-900">{value}</div>
+      <div className="mt-1.5 text-xs font-semibold text-ink-500">{label}</div>
     </div>
   );
 }
