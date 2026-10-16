@@ -61,7 +61,7 @@ export default async function DashboardPage({
             <p className="mt-1 text-sm text-ink-400">
               {isSingleDay
                 ? resolved.label
-                : `${resolved.label} — ${resolved.since.toISOString().slice(0, 10)} to ${resolved.until.toISOString().slice(0, 10)}`}
+                : `${resolved.label} · ${resolved.since.toISOString().slice(0, 10)} to ${resolved.until.toISOString().slice(0, 10)}`}
             </p>
           </div>
           <DateRangePicker currentPreset={preset} currentLabel={resolved.label} />
@@ -113,7 +113,7 @@ export default async function DashboardPage({
             accidental double-charges are easy to spot and refund. */}
         <div className="mt-5 section-card">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm font-semibold text-ink-900">Transactions — {resolved.label}</span>
+            <span className="text-sm font-semibold text-ink-900">Transactions · {resolved.label}</span>
             {transactions.some((t) => t.isDuplicate) && (
               <span className="text-xs font-medium text-amber-600">
                 {transactions.filter((t) => t.isDuplicate).length} possible duplicate
@@ -162,6 +162,10 @@ function getGreeting(timeZone: string): string {
   return "Good evening";
 }
 
+const whole = (n: number) => `$${Math.round(Math.abs(n)).toLocaleString("en-US")}`;
+
+// Soft rounded font (Nunito, loaded in the root layout) and as few words as
+// possible: one headline number plus three small facts.
 function GreetingBanner({
   greeting,
   yesterday,
@@ -170,30 +174,51 @@ function GreetingBanner({
   yesterday: YesterdaySnapshot;
 }) {
   const profitPositive = yesterday.profit >= 0;
-  const dateLabel = formatLabelDate(yesterday.dateLabel);
+  const dateLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(
+    yesterday.dateLabel
+  );
 
   return (
-    <div className="section-card bg-gradient-to-br from-indigo-50 via-white to-pink-50">
-      <h1 className="text-2xl font-extrabold tracking-tight !text-ink-900 [text-shadow:none]">{greeting}!</h1>
+    <div
+      className="section-card bg-gradient-to-br from-indigo-50 via-white to-pink-50"
+      style={{ fontFamily: "var(--font-nunito), ui-rounded, system-ui, sans-serif" }}
+    >
+      <h1 className="text-2xl font-extrabold tracking-normal !text-ink-900 [text-shadow:none]">{greeting}</h1>
       {!yesterday.hasData ? (
-        <p className="mt-1.5 text-sm !text-ink-400">No data synced for yesterday ({dateLabel}) yet.</p>
+        <p className="mt-1 text-sm font-medium !text-ink-400">No data for yesterday yet.</p>
       ) : (
-        <p className="mt-1.5 text-sm !text-ink-700">
-          Yesterday ({dateLabel}) you made{" "}
-          <span className={`font-bold ${profitPositive ? "text-emerald-600" : "text-rose-600"}`}>
-            {profitPositive ? "" : "-"}
-            {formatCurrency(Math.abs(yesterday.profit))} {profitPositive ? "profit" : "loss"}
-          </span>{" "}
-          — {formatCurrency(yesterday.ghlRevenue)} GHL revenue vs {formatCurrency(yesterday.metaSpend)} Meta spend.
-          {yesterday.bestAd && (
-            <>
-              {" "}Best performer:{" "}
-              <span className="font-semibold text-ink-900">{yesterday.bestAd.name}</span> —{" "}
-              {formatCurrency(yesterday.bestAd.profit)} profit ({formatRoas(yesterday.bestAd.trueRoas)} True ROAS).
-            </>
-          )}
-        </p>
+        <>
+          <p className="mt-1 text-sm font-semibold !text-ink-400">Yesterday, {dateLabel}</p>
+          <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-3">
+            <div>
+              <div
+                className={`text-3xl font-extrabold leading-none ${profitPositive ? "text-emerald-500" : "text-rose-500"}`}
+              >
+                {profitPositive ? "+" : "-"}
+                {whole(yesterday.profit)}
+              </div>
+              <div className="mt-1 text-xs font-semibold text-ink-400">{profitPositive ? "profit" : "loss"}</div>
+            </div>
+            <Fact value={whole(yesterday.ghlRevenue)} label="revenue" />
+            <Fact value={whole(yesterday.metaSpend)} label="ad spend" />
+            {yesterday.bestAd && (
+              <Fact
+                value={yesterday.bestAd.name}
+                label={`best ad${yesterday.bestAd.trueRoas !== null ? `, ${yesterday.bestAd.trueRoas.toFixed(1)}x` : ""}`}
+              />
+            )}
+          </div>
+        </>
       )}
+    </div>
+  );
+}
+
+function Fact({ value, label }: { value: string; label: string }) {
+  return (
+    <div>
+      <div className="text-lg font-bold leading-none text-ink-900">{value}</div>
+      <div className="mt-1 text-xs font-semibold text-ink-400">{label}</div>
     </div>
   );
 }

@@ -1,7 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans, Nunito } from "next/font/google";
 import "./globals.css";
 import SceneBackground from "./SceneBackground";
+
+const nunito = Nunito({
+  subsets: ["latin"],
+  variable: "--font-nunito",
+  weight: ["500", "600", "700", "800"],
+});
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -27,7 +33,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={jakarta.variable}>
+    <html lang="en" className={`${jakarta.variable} ${nunito.variable}`}>
       <body>
         <SceneBackground />
         {children}
