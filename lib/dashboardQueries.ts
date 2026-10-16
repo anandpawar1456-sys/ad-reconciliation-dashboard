@@ -347,6 +347,17 @@ export async function getRangeTransactions(since: Date, until: Date, timeZone: s
   }));
 }
 
+// Last 7 days ending yesterday, oldest first, for the greeting sparklines.
+export type YesterdayTrends = {
+  profit: number[];
+  revenue: number[];
+  spend: number[];
+  trueRoas: number[];
+  orders: number[];
+  cpa: number[];
+  recovered: number[];
+};
+
 export type YesterdaySnapshot = {
   dateLabel: Date;
   hasData: boolean;
@@ -360,7 +371,10 @@ export type YesterdaySnapshot = {
   trueRoas: number | null;
   cpa: number | null;
   previousProfit: number | null; // the day before yesterday, for a quick compare
+  trends: YesterdayTrends;
   bestAd: {
+    adId: string;
+    trend: number[]; // that ad's true revenue per day, same 7 days
     name: string;
     trueRevenue: number;
     metaSpend: number;
@@ -398,6 +412,39 @@ export async function getYesterdaySnapshot(timeZone: string): Promise<YesterdayS
       ? Number(prevReconciliation?.ghlRevenue ?? 0) - prevAttribution.reduce((sum, r) => sum + Number(r.metaSpend), 0)
       : null;
 
+  // 7-day trends (oldest first) for the sparklines.
+  const DAY = 24 * 60 * 60 * 1000;
+  const days = Array.from({ length: 7 }, (_, i) => new Date(yesterday.getTime() - (6 - i) * DAY));
+  const [weekRecon, weekAttr] = await Promise.all([
+    prisma.dailyReconciliation.findMany({ where: { date: { gte: days[0], lte: yesterday } } }),
+    prisma.adAttribution.findMany({
+      where: { date: { gte: days[0], lte: yesterday } },
+      select: { date: true, adId: true, metaSpend: true, trueRevenue: true, recoveredRevenue: true },
+    }),
+  ]);
+  const reconByDay = new Map(weekRecon.map((r) => [r.date.toISOString(), r]));
+  const attrByDay = new Map<string, typeof weekAttr>();
+  for (const a of weekAttr) {
+    const key = a.date.toISOString();
+    attrByDay.set(key, [...(attrByDay.get(key) ?? []), a]);
+  }
+  const trends: YesterdayTrends = { profit: [], revenue: [], spend: [], trueRoas: [], orders: [], cpa: [], recovered: [] };
+  for (const d of days) {
+    const key = d.toISOString();
+    const r = reconByDay.get(key);
+    const rows = attrByDay.get(key) ?? [];
+    const rev = Number(r?.ghlRevenue ?? 0);
+    const spend = rows.reduce((sum, x) => sum + Number(x.metaSpend), 0);
+    const trueRev = rows.reduce((sum, x) => sum + Number(x.trueRevenue), 0);
+    trends.revenue.push(rev);
+    trends.spend.push(spend);
+    trends.profit.push(rev - spend);
+    trends.trueRoas.push(spend > 0 ? trueRev / spend : 0);
+    trends.orders.push(r?.ghlTransactions ?? 0);
+    trends.cpa.push(r && r.metaPurchases > 0 ? spend / r.metaPurchases : 0);
+    trends.recovered.push(rows.reduce((sum, x) => sum + Number(x.recoveredRevenue), 0));
+  }
+
   let bestAd: YesterdaySnapshot["bestAd"] = null;
   for (const row of attributionRows) {
     const rowSpend = Number(row.metaSpend);
@@ -405,6 +452,10 @@ export async function getYesterdaySnapshot(timeZone: string): Promise<YesterdayS
     const adProfit = rowTrueRevenue - rowSpend;
     if (!bestAd || adProfit > bestAd.profit) {
       bestAd = {
+        adId: row.adId,
+        trend: days.map((d) =>
+          weekAttr.filter((a) => a.adId === row.adId && a.date.getTime() === d.getTime()).reduce((sum, a) => sum + Number(a.trueRevenue), 0)
+        ),
         name: row.adName ?? row.adId,
         trueRevenue: rowTrueRevenue,
         metaSpend: rowSpend,
@@ -427,6 +478,7 @@ export async function getYesterdaySnapshot(timeZone: string): Promise<YesterdayS
     trueRoas: metaSpend > 0 ? trueRevenue / metaSpend : null,
     cpa: metaPurchases > 0 ? metaSpend / metaPurchases : null,
     previousProfit,
+    trends,
     bestAd,
   };
 }
