@@ -69,19 +69,17 @@ export default async function DashboardPage({
 
         {/* Stat tiles */}
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          <StatTile label="GHL Revenue" value={formatCurrency(data.totals.ghlRevenue)} accent="from-indigo-400 to-blue-500" />
-          <StatTile label="Meta Reported Revenue" value={formatCurrency(data.totals.metaRevenue)} accent="from-sky-400 to-cyan-500" />
-          <StatTile label="Meta Ad Spend" value={formatCurrency(data.totals.metaSpend)} accent="from-fuchsia-400 to-pink-500" />
+          <StatTile label="GHL Revenue" value={formatCurrency(data.totals.ghlRevenue)} />
+          <StatTile label="Meta Reported Revenue" value={formatCurrency(data.totals.metaRevenue)} />
+          <StatTile label="Meta Ad Spend" value={formatCurrency(data.totals.metaSpend)} />
           <StatTile
             label="Gap (Meta-driven GHL − Meta)"
             value={`${formatCurrency(data.totals.gapAmount)} (${data.totals.gapPercent.toFixed(1)}%)`}
-            accent={data.totals.gapAmount > 0 ? "from-rose-400 to-orange-500" : "from-emerald-400 to-teal-500"}
           />
-          <StatTile label="True ROAS" value={formatRoas(data.totals.avgTrueRoas)} accent="from-violet-400 to-purple-500" />
+          <StatTile label="True ROAS" value={formatRoas(data.totals.avgTrueRoas)} />
           <StatTile
             label={profit >= 0 ? "Profit" : "Loss"}
             value={formatCurrency(Math.abs(profit))}
-            accent={profit >= 0 ? "from-emerald-400 to-teal-500" : "from-red-500 to-rose-600"}
           />
         </div>
 
@@ -239,30 +237,28 @@ function GreetingBanner({
 }
 
 const FACT_TONES = {
-  indigo: { tile: "bg-indigo-50 ring-indigo-100", dot: "from-indigo-400 to-blue-500" },
-  pink: { tile: "bg-pink-50 ring-pink-100", dot: "from-fuchsia-400 to-pink-500" },
-  violet: { tile: "bg-violet-50 ring-violet-100", dot: "from-violet-400 to-purple-500" },
-  sky: { tile: "bg-sky-50 ring-sky-100", dot: "from-sky-400 to-cyan-500" },
-  amber: { tile: "bg-amber-50 ring-amber-100", dot: "from-amber-400 to-orange-500" },
-  emerald: { tile: "bg-emerald-50 ring-emerald-100", dot: "from-emerald-400 to-teal-500" },
+  indigo: { tile: "bg-indigo-50 ring-indigo-100" },
+  pink: { tile: "bg-pink-50 ring-pink-100" },
+  violet: { tile: "bg-violet-50 ring-violet-100" },
+  sky: { tile: "bg-sky-50 ring-sky-100" },
+  amber: { tile: "bg-amber-50 ring-amber-100" },
+  emerald: { tile: "bg-emerald-50 ring-emerald-100" },
 } as const;
 
 function Fact({ value, label, tone }: { value: string; label: string; tone: keyof typeof FACT_TONES }) {
   const t = FACT_TONES[tone];
   return (
-    <div className={`rounded-2xl px-4 py-3.5 ring-1 ring-inset ${t.tile}`}>
-      <div className={`h-1.5 w-6 rounded-full bg-gradient-to-r ${t.dot}`} />
-      <div className="mt-2.5 text-xl font-extrabold leading-none tracking-tight text-ink-900">{value}</div>
+    <div className={`rounded-2xl px-4 py-3 ring-1 ring-inset ${t.tile}`}>
+      <div className="text-xl font-extrabold leading-none tracking-tight text-ink-900">{value}</div>
       <div className="mt-1.5 text-xs font-semibold text-ink-500">{label}</div>
     </div>
   );
 }
 
-function StatTile({ label, value, accent }: { label: string; value: string; accent: string }) {
+function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="section-card">
-      <div className={`h-2 w-8 rounded-full bg-gradient-to-r ${accent}`} />
-      <div className="mt-3 text-xl font-extrabold tracking-tight text-ink-900">{value}</div>
+      <div className="text-xl font-extrabold tracking-tight text-ink-900">{value}</div>
       <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-ink-400">{label}</div>
     </div>
   );
