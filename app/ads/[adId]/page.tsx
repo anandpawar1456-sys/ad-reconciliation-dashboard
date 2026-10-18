@@ -55,7 +55,7 @@ export default async function AdHistoryPage({ params }: { params: { adId: string
         </div>
 
         {L.metaRevenue - L.ghlRevenue >= 1 && (
-          <p className="mt-4 rounded-xl bg-indigo-50 px-4 py-3 text-sm text-ink-700">
+          <p className="mt-4 rounded-2xl bg-indigo-50 px-4 py-3 text-sm !text-ink-700">
             Meta credits this ad with {formatCurrency(L.metaRevenue)} but only {formatCurrency(L.ghlRevenue)} of GHL
             sales are tied to it. The rest are real GHL orders whose buyers reached checkout without ad tracking in
             the URL, so GHL can&apos;t say which ad they came from. The tool matches those back to ads by amount and day
