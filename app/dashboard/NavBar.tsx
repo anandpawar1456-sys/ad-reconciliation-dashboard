@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/ads", label: "Ad Lookup" },
   { href: "/true-roas", label: "True ROAS" },
   { href: "/funnel", label: "Funnel" },
+  { href: "/duplicates", label: "Duplicates" },
   { href: "/missing-transactions", label: "Missing" },
   { href: "/settings", label: "Settings" },
 ];
@@ -36,7 +37,7 @@ export default function NavBar() {
         {/* Desktop nav — hidden below md, where it's replaced by the
             hamburger menu (this row doesn't have room for 7 links plus
             logout once the viewport gets narrow). */}
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-1 lg:flex">
           {LINKS.map((link) => (
             <Link
               key={link.href}
@@ -60,7 +61,7 @@ export default function NavBar() {
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white transition hover:bg-white/10 md:hidden"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white transition hover:bg-white/10 lg:hidden"
         >
           {open ? (
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -75,7 +76,7 @@ export default function NavBar() {
       </div>
 
       {open && (
-        <nav className="border-t border-white/10 bg-[#0b2230]/95 px-4 py-3 backdrop-blur-xl md:hidden">
+        <nav className="border-t border-white/10 bg-[#0b2230]/95 px-4 py-3 backdrop-blur-xl lg:hidden">
           <div className="flex flex-col gap-1">
             {LINKS.map((link) => (
               <Link

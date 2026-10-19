@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { markDuplicates, DUPLICATE_WINDOW_MS } from "@/lib/duplicates";
 import { notExcludedCustomer } from "@/lib/excludedCampaigns";
 import { toLocalDateLabel, getUtcRangeForLabels, DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { getSettings } from "@/lib/settings";
@@ -304,29 +305,31 @@ export type RangeTransaction = {
 };
 
 // The transaction list shown on the homepage for whatever date range is
-// selected (not just a single day). A transaction is flagged as a likely
-// DUPLICATE when the same customer bought the same product for the same
-// amount more than once in the range — usually an accidental double
-// checkout submission, not two genuine separate sales. The first
-// occurrence (chronologically) is left unflagged as the presumed real
-// sale; later repeats in the same group are flagged.
+// selected. A row is flagged DUPLICATE by the shared rule in lib/duplicates.ts
+// (same customer, funnel step and amount repeated within a day); the first
+// order of a repeat is left unflagged as the real sale.
 export async function getRangeTransactions(since: Date, until: Date, timeZone: string): Promise<RangeTransaction[]> {
   const range = getUtcRangeForLabels(since, until, timeZone);
   const orders = await prisma.ghlOrder.findMany({
-    where: { ...notExcludedCustomer, occurredAt: { gte: range.start, lt: range.end }, status: "completed" },
+    where: {
+      ...notExcludedCustomer,
+      // extra day before the range so a repeat on day one still finds its original
+      occurredAt: { gte: new Date(range.start.getTime() - DUPLICATE_WINDOW_MS), lt: range.end },
+      status: "completed",
+    },
     include: { contact: true },
     orderBy: { occurredAt: "desc" },
-    take: 500,
   });
 
-  const runningCount = new Map<string, number>();
-  const isDuplicateById = new Map<string, boolean>();
-  for (const o of [...orders].reverse()) {
-    const key = `${o.contactId}|${o.productId ?? o.productName ?? ""}|${Number(o.amount)}`;
-    const count = (runningCount.get(key) ?? 0) + 1;
-    runningCount.set(key, count);
-    isDuplicateById.set(o.id, count > 1);
-  }
+  const dups = markDuplicates(
+    orders.map((o) => ({
+      id: o.id,
+      contactId: o.contactId,
+      amount: Number(o.amount),
+      sourceStepId: o.sourceStepId,
+      occurredAt: o.occurredAt,
+    }))
+  );
 
   const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -337,14 +340,17 @@ export async function getRangeTransactions(since: Date, until: Date, timeZone: s
     hour12: true,
   });
 
-  return orders.map((o) => ({
-    id: o.id,
-    dateTime: dateTimeFormatter.format(o.occurredAt),
-    amount: Number(o.amount),
-    email: o.contact?.email ?? null,
-    productName: o.productName ?? o.sourceName ?? null,
-    isDuplicate: isDuplicateById.get(o.id) ?? false,
-  }));
+  return orders
+    .filter((o) => o.occurredAt >= range.start)
+    .slice(0, 500)
+    .map((o) => ({
+      id: o.id,
+      dateTime: dateTimeFormatter.format(o.occurredAt),
+      amount: Number(o.amount),
+      email: o.contact?.email ?? null,
+      productName: o.productName ?? o.sourceName ?? null,
+      isDuplicate: dups.has(o.id),
+    }));
 }
 
 // Last 7 days ending yesterday, oldest first, for the greeting sparklines.
