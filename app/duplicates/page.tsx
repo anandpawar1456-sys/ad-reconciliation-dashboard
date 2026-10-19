@@ -1,6 +1,6 @@
 import Link from "next/link";
 import NavBar from "../dashboard/NavBar";
-import { getDuplicateRows, type DuplicateRow } from "@/lib/duplicates";
+import { getDuplicateRows, groupDuplicates, type DuplicateGroup } from "@/lib/duplicates";
 import { getEarliestDataDate } from "@/lib/dashboardQueries";
 import { getSettings } from "@/lib/settings";
 import { getGhlFunnelStepNames } from "@/lib/ghl";
@@ -47,13 +47,13 @@ export default async function DuplicatesPage({
       : Promise.resolve(new Map()),
   ]);
 
+  const groups = groupDuplicates(rows);
   const extraCharged = rows.reduce((s, r) => s + r.amount, 0);
   const customers = new Set(rows.map((r) => r.contactId)).size;
   const days = new Set(rows.map((r) => r.dayKey)).size;
 
-  const timeFmt = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone });
-  const stepLabel = (r: DuplicateRow) => (r.stepId ? stepNames.get(r.stepId)?.stepName : undefined) ?? r.funnelName ?? "Order";
-  const who = (r: DuplicateRow) => r.email ?? r.phone ?? "Unknown contact";
+  const stepLabel = (g: DuplicateGroup) => (g.stepId ? stepNames.get(g.stepId)?.stepName : undefined) ?? g.funnelName ?? "Order";
+  const who = (g: DuplicateGroup) => g.email ?? g.phone ?? "Unknown contact";
   const href = (next: { range?: string; view?: string }) =>
     `/duplicates?range=${next.range ?? preset}&view=${next.view ?? view}`;
 
@@ -63,9 +63,9 @@ export default async function DuplicatesPage({
       <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
         <h1 className="text-3xl font-extrabold tracking-tight">Duplicate Transactions</h1>
         <p>
-          The same customer buying the same funnel step for the same amount again within 24 hours, usually a double
-          checkout or a double charge. The first order is the real sale; the repeats listed here are the ones to check
-          or refund.
+          Only the same product charged to the same customer at the same price again within 24 hours. A front end followed
+          by Upsell 1 or Upsell 2 is never a duplicate, and neither are two different upsells. Each entry below shows the
+          original charge and its repeat, so the original is the real sale and the repeat is what to check or refund.
         </p>
 
         <div className="mt-6 flex flex-wrap gap-2">
@@ -83,7 +83,7 @@ export default async function DuplicatesPage({
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Tile label="Duplicate orders" value={String(rows.length)} />
+          <Tile label="Repeat charges" value={String(rows.length)} />
           <Tile label="Customers" value={String(customers)} />
           <Tile label="Extra charged" value={formatCurrency(extraCharged)} tone="bad" />
           <Tile label="Days affected" value={String(days)} />
@@ -109,11 +109,11 @@ export default async function DuplicatesPage({
             <p className="mt-1 text-sm text-ink-400">{resolved.label}. Try a longer range.</p>
           </div>
         ) : view === "date" ? (
-          <DateView rows={rows} timeFmt={timeFmt} stepLabel={stepLabel} who={who} />
+          <DateView groups={groups} stepLabel={stepLabel} who={who} timeZone={timeZone} />
         ) : view === "month" ? (
-          <MonthView rows={rows} who={who} />
+          <MonthView groups={groups} stepLabel={stepLabel} who={who} />
         ) : (
-          <CustomerView rows={rows} who={who} timeZone={timeZone} />
+          <CustomerView groups={groups} stepLabel={stepLabel} who={who} />
         )}
       </main>
     </div>
@@ -138,8 +138,9 @@ function groupBy<T>(items: T[], key: (t: T) => string): Array<[string, T[]]> {
   return [...map.entries()];
 }
 
-const sum = (rows: DuplicateRow[]) => rows.reduce((s, r) => s + r.amount, 0);
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const groupExtra = (list: DuplicateGroup[]) => list.reduce((s, g) => s + g.extraCharged, 0);
+const repeatCount = (list: DuplicateGroup[]) => list.reduce((s, g) => s + g.repeats.length, 0);
 
 function dayLabel(key: string) {
   return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(
@@ -151,37 +152,117 @@ function monthLabel(key: string) {
   return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${key}-01T00:00:00Z`));
 }
 
-function DateView({
-  rows,
-  timeFmt,
+function when(d: Date, timeZone: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone }).format(d);
+}
+
+// One product charged to one customer more than once: original first, then
+// each repeat.
+function GroupBlock({
+  g,
   stepLabel,
   who,
+  timeZone,
 }: {
-  rows: DuplicateRow[];
-  timeFmt: Intl.DateTimeFormat;
-  stepLabel: (r: DuplicateRow) => string;
-  who: (r: DuplicateRow) => string;
+  g: DuplicateGroup;
+  stepLabel: (g: DuplicateGroup) => string;
+  who: (g: DuplicateGroup) => string;
+  timeZone: string;
+}) {
+  return (
+    <div className="py-3.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-extrabold text-ink-900">{who(g)}</div>
+          <div className="text-xs font-semibold text-ink-500">
+            {stepLabel(g)} · {formatCurrency(g.amount)} each · charged {g.repeats.length + 1} times
+          </div>
+        </div>
+        <div className="text-sm font-extrabold text-rose-600">+{formatCurrency(g.extraCharged)} extra</div>
+      </div>
+      <div className="mt-2 space-y-1 border-l-2 border-ink-900/10 pl-3 text-xs">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-ink-700">
+            {when(g.originalAt, timeZone)} <span className="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-600">original</span>
+          </span>
+          <span className="font-semibold text-ink-500">{formatCurrency(g.amount)}</span>
+        </div>
+        {g.repeats.map((r) => (
+          <div key={r.orderId} className="flex items-center justify-between gap-3">
+            <span className="text-ink-700">
+              {when(r.at, timeZone)} <span className="ml-1 rounded-full bg-rose-50 px-2 py-0.5 font-bold text-rose-600">duplicate</span>
+              <span className="ml-1.5 text-ink-400">{r.minutesAfterOriginal < 1 ? "under a minute" : `${r.minutesAfterOriginal} min`} after the original</span>
+            </span>
+            <span className="font-semibold text-ink-500">{formatCurrency(r.amount)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DateView({
+  groups,
+  stepLabel,
+  who,
+  timeZone,
+}: {
+  groups: DuplicateGroup[];
+  stepLabel: (g: DuplicateGroup) => string;
+  who: (g: DuplicateGroup) => string;
+  timeZone: string;
 }) {
   return (
     <div className="mt-5 space-y-4">
-      {groupBy(rows, (r) => r.dayKey).map(([day, list]) => (
+      {groupBy(groups, (g) => g.dayKey).map(([day, list]) => (
         <div key={day} className="section-card">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-base font-extrabold text-ink-900">{dayLabel(day)}</h2>
             <span className="text-sm font-semibold text-ink-400">
-              {plural(list.length, "duplicate")} · <span className="text-rose-600">{formatCurrency(sum(list))}</span>
+              {plural(repeatCount(list), "repeat charge")} · <span className="text-rose-600">{formatCurrency(groupExtra(list))}</span>
             </span>
           </div>
-          <div className="mt-3 divide-y divide-ink-900/5">
-            {list.map((r) => (
-              <div key={r.orderId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5">
+          <div className="mt-1 divide-y divide-ink-900/5">
+            {list.map((g) => (
+              <GroupBlock key={g.originalId} g={g} stepLabel={stepLabel} who={who} timeZone={timeZone} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MonthView({
+  groups,
+  stepLabel,
+  who,
+}: {
+  groups: DuplicateGroup[];
+  stepLabel: (g: DuplicateGroup) => string;
+  who: (g: DuplicateGroup) => string;
+}) {
+  return (
+    <div className="mt-5 space-y-4">
+      {groupBy(groups, (g) => g.monthKey).map(([month, list]) => (
+        <div key={month} className="section-card">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-base font-extrabold text-ink-900">{monthLabel(month)}</h2>
+            <span className="text-sm font-semibold text-ink-400">
+              {plural(repeatCount(list), "repeat charge")} · {plural(new Set(list.map((g) => g.contactId)).size, "customer")} ·{" "}
+              <span className="text-rose-600">{formatCurrency(groupExtra(list))}</span>
+            </span>
+          </div>
+          <div className="mt-2 divide-y divide-ink-900/5">
+            {list.map((g) => (
+              <div key={g.originalId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 py-2.5">
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-ink-900">{who(r)}</div>
+                  <div className="truncate text-sm font-semibold text-ink-900">{who(g)}</div>
                   <div className="text-xs text-ink-400">
-                    {stepLabel(r)} · {timeFmt.format(r.at)} · {r.minutesAfterOriginal < 1 ? "under a minute" : `${r.minutesAfterOriginal} min`} after the first order
+                    {stepLabel(g)} · {formatCurrency(g.amount)} charged {g.repeats.length + 1} times
                   </div>
                 </div>
-                <div className="text-sm font-extrabold text-ink-900">{formatCurrency(r.amount)}</div>
+                <div className="text-sm font-extrabold text-rose-600">+{formatCurrency(g.extraCharged)}</div>
               </div>
             ))}
           </div>
@@ -191,55 +272,41 @@ function DateView({
   );
 }
 
-function MonthView({ rows, who }: { rows: DuplicateRow[]; who: (r: DuplicateRow) => string }) {
+function CustomerView({
+  groups,
+  stepLabel,
+  who,
+}: {
+  groups: DuplicateGroup[];
+  stepLabel: (g: DuplicateGroup) => string;
+  who: (g: DuplicateGroup) => string;
+}) {
+  const customers = groupBy(groups, (g) => g.contactId)
+    .map(([, list]) => ({ list, name: who(list[0]), extra: groupExtra(list), repeats: repeatCount(list) }))
+    .sort((a, b) => b.repeats - a.repeats || b.extra - a.extra);
+
   return (
     <div className="mt-5 space-y-4">
-      {groupBy(rows, (r) => r.monthKey).map(([month, list]) => {
-        const perCustomer = groupBy(list, (r) => r.contactId)
-          .map(([, rs]) => ({ name: who(rs[0]), count: rs.length, total: sum(rs) }))
-          .sort((a, b) => b.count - a.count || b.total - a.total);
-        return (
-          <div key={month} className="section-card">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-base font-extrabold text-ink-900">{monthLabel(month)}</h2>
-              <span className="text-sm font-semibold text-ink-400">
-                {plural(list.length, "duplicate")} · {plural(perCustomer.length, "customer")} ·{" "}
-                <span className="text-rose-600">{formatCurrency(sum(list))}</span>
-              </span>
-            </div>
-            <div className="mt-3 divide-y divide-ink-900/5">
-              {perCustomer.map((c) => (
-                <div key={c.name} className="flex items-center justify-between gap-4 py-2.5">
-                  <span className="min-w-0 truncate text-sm font-semibold text-ink-900">{c.name}</span>
-                  <span className="shrink-0 text-sm text-ink-400">
-                    {plural(c.count, "duplicate")} · <span className="font-extrabold text-ink-900">{formatCurrency(c.total)}</span>
+      {customers.map((c) => (
+        <div key={c.list[0].contactId} className="section-card">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="truncate text-base font-extrabold text-ink-900">{c.name}</h2>
+            <span className="text-sm font-semibold text-ink-400">
+              {plural(c.repeats, "repeat charge")} · <span className="text-rose-600">{formatCurrency(c.extra)}</span>
+            </span>
+          </div>
+          <div className="mt-2 divide-y divide-ink-900/5">
+            {c.list.map((g) => (
+              <div key={g.originalId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 py-2.5">
+                <div className="text-sm text-ink-900">
+                  <span className="font-semibold">{stepLabel(g)}</span>{" "}
+                  <span className="text-ink-400">
+                    {formatCurrency(g.amount)} × {g.repeats.length + 1} · {dayLabel(g.dayKey)}
                   </span>
                 </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function CustomerView({ rows, who, timeZone }: { rows: DuplicateRow[]; who: (r: DuplicateRow) => string; timeZone: string }) {
-  const dateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone });
-  const customers = groupBy(rows, (r) => r.contactId)
-    .map(([, rs]) => ({ rs, name: who(rs[0]), total: sum(rs) }))
-    .sort((a, b) => b.rs.length - a.rs.length || b.total - a.total);
-
-  return (
-    <div className="mt-5 section-card divide-y divide-ink-900/5 !py-2">
-      {customers.map((c) => (
-        <div key={c.rs[0].contactId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-ink-900">{c.name}</div>
-            <div className="text-xs text-ink-400">{[...new Set(c.rs.map((r) => dateFmt.format(r.at)))].join(", ")}</div>
-          </div>
-          <div className="text-sm text-ink-400">
-            {plural(c.rs.length, "duplicate")} · <span className="font-extrabold text-rose-600">{formatCurrency(c.total)}</span>
+                <div className="text-sm font-extrabold text-rose-600">+{formatCurrency(g.extraCharged)}</div>
+              </div>
+            ))}
           </div>
         </div>
       ))}

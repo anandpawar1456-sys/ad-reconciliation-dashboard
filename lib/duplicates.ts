@@ -44,6 +44,7 @@ export type DuplicateRow = {
   funnelName: string | null;
   stepId: string | null;
   at: Date;
+  originalId: string;
   originalAt: Date;
   minutesAfterOriginal: number;
   dayKey: string; // YYYY-MM-DD in the reporting timezone
@@ -91,6 +92,7 @@ export async function getDuplicateRows(since: Date, until: Date): Promise<Duplic
         funnelName: o.sourceName,
         stepId: o.sourceStepId,
         at: o.occurredAt,
+        originalId: d.originalId,
         originalAt: d.originalAt,
         minutesAfterOriginal: Math.max(0, Math.round((o.occurredAt.getTime() - d.originalAt.getTime()) / 60000)),
         dayKey: label,
@@ -98,4 +100,49 @@ export async function getDuplicateRows(since: Date, until: Date): Promise<Duplic
       };
     })
     .sort((a, b) => b.at.getTime() - a.at.getTime());
+}
+
+// One product charged more than once to the same customer: the original
+// order plus its repeats. Everything in a group shares customer, funnel step
+// (the product) and amount, so the page can show the first charge next to
+// the repeats instead of just the repeats on their own.
+export type DuplicateGroup = {
+  originalId: string;
+  originalAt: Date;
+  contactId: string;
+  email: string | null;
+  phone: string | null;
+  funnelName: string | null;
+  stepId: string | null;
+  amount: number;
+  repeats: DuplicateRow[]; // oldest first
+  extraCharged: number; // amount * repeats.length
+  dayKey: string; // day of the first repeat
+  monthKey: string;
+};
+
+export function groupDuplicates(rows: DuplicateRow[]): DuplicateGroup[] {
+  const byOriginal = new Map<string, DuplicateRow[]>();
+  for (const r of rows) byOriginal.set(r.originalId, [...(byOriginal.get(r.originalId) ?? []), r]);
+
+  return [...byOriginal.entries()]
+    .map(([originalId, list]) => {
+      const repeats = [...list].sort((a, b) => a.at.getTime() - b.at.getTime());
+      const first = repeats[0];
+      return {
+        originalId,
+        originalAt: first.originalAt,
+        contactId: first.contactId,
+        email: first.email,
+        phone: first.phone,
+        funnelName: first.funnelName,
+        stepId: first.stepId,
+        amount: first.amount,
+        repeats,
+        extraCharged: repeats.reduce((sum, r) => sum + r.amount, 0),
+        dayKey: first.dayKey,
+        monthKey: first.monthKey,
+      };
+    })
+    .sort((a, b) => b.repeats[0].at.getTime() - a.repeats[0].at.getTime());
 }
