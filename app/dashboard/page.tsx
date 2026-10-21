@@ -87,10 +87,11 @@ export default async function DashboardPage({
 
         {data.totals.ghlOtherRevenue > 0 && (
           <p className="mt-3 text-xs text-ink-400">
-            Organic sales are GHL orders Meta can&apos;t claim: customers who came back on their own (for example an upsell
-            bought from an email days after the front end), plus email and direct sales. They are kept out of the gap and
-            out of every ad&apos;s numbers. The gap compares Meta&apos;s revenue with the{" "}
-            {formatCurrency(data.totals.ghlMetaRevenue)} of GHL sales that came through Meta ads.
+            Organic sales are GHL orders Meta can&apos;t claim: customers who came back on their own more than 7 days
+            after their first purchase (Meta&apos;s 7-day click window), plus email and direct sales. Back-to-back and
+            same-day upsells stay with the ad. Organic sales are kept out of the gap and every ad&apos;s numbers. The gap
+            compares Meta&apos;s revenue with the {formatCurrency(data.totals.ghlMetaRevenue)} of GHL sales that came
+            through Meta ads.
           </p>
         )}
 

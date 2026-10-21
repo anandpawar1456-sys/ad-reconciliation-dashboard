@@ -2,15 +2,17 @@ import { prisma } from "@/lib/prisma";
 
 // Which orders belong to the ad that brought the customer in, and which are
 // ORGANIC (the customer came back on their own, e.g. buying an upsell from an
-// email days after the front end).
+// email long after the front end).
 //
-// GHL ties attribution to the CONTACT, not to each order, so without this a
-// later email-driven purchase gets credited to whichever ad sold the front
-// end. In this account every funnel order (front end, bumps, upsells) lands
-// within ~3 hours of the customer's first purchase, and nothing lands between
-// 3 and 24 hours, so anything later than the window below is a separate,
-// organic sale.
-export const JOURNEY_WINDOW_MS = 6 * 60 * 60 * 1000;
+// GHL ties attribution to the CONTACT, not to each order, so without a cut-off
+// a much later email-driven purchase gets credited to whichever ad sold the
+// front end. The cut-off mirrors the Meta ad account's attribution setting
+// (7-day click, 1-day engagement, 1-day view): an order counts for the ad if
+// it lands within 7 days of the customer's first purchase, so back-to-back
+// funnel orders, same-day purchases and short delays all stay with Meta. We
+// can't see the exact click time, so the window starts at the first purchase
+// (the click always came before it), which is the closest we can get.
+export const JOURNEY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 // First COMPLETED order time per contact (all history). One cheap grouped
 // query over the whole order table.
