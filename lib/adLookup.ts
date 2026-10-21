@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notExcludedCustomer } from "@/lib/excludedCampaigns";
 import { getSettings } from "@/lib/settings";
+import { getFirstOrderTimes, isJourneyOrder } from "@/lib/journey";
 import { toLocalDateLabel, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
 export type AdSearchResult = {
@@ -172,7 +173,7 @@ export async function getAdHistory(adId: string): Promise<AdHistory | null> {
   const settings = await getSettings();
   const timeZone = settings.reportingTimezone || DEFAULT_TIMEZONE;
 
-  const [ad, insights, attribution, orders] = await Promise.all([
+  const [ad, insights, attribution, allOrders, firstTimes] = await Promise.all([
     prisma.metaAd.findUnique({ where: { id: adId } }),
     prisma.metaInsight.findMany({ where: { level: "ad", adId }, orderBy: { date: "asc" } }),
     prisma.adAttribution.findMany({ where: { adId }, orderBy: { date: "asc" } }),
@@ -184,7 +185,10 @@ export async function getAdHistory(adId: string): Promise<AdHistory | null> {
       include: { contact: { select: { email: true } } },
       orderBy: { occurredAt: "desc" },
     }),
+    getFirstOrderTimes(),
   ]);
+  // organic orders (returning buyers) from this ad's contacts aren't this ad's sales
+  const orders = allOrders.filter((o) => isJourneyOrder(o.occurredAt, firstTimes.get(o.contactId)));
 
   if (!ad && insights.length === 0 && attribution.length === 0 && orders.length === 0) return null;
 

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { markDuplicates, DUPLICATE_WINDOW_MS } from "@/lib/duplicates";
+import { getFirstOrderTimes, orderSource } from "@/lib/journey";
 import { notExcludedCustomer } from "@/lib/excludedCampaigns";
 import { toLocalDateLabel, getUtcRangeForLabels, DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { getSettings } from "@/lib/settings";
@@ -177,21 +178,19 @@ export async function getOverviewData(since: Date, until: Date): Promise<Overvie
     prisma.adAttribution.findMany({ where: { date: { gte: since, lt: untilExclusive } } }),
     prisma.ghlOrder.findMany({
       where: { ...notExcludedCustomer, occurredAt: { gte: orderRange.start, lt: orderRange.end }, status: "completed" },
-      select: { amount: true, contact: { select: { fbclid: true, utmSource: true, adId: true } } },
+      select: { amount: true, contactId: true, occurredAt: true, contact: { select: { fbclid: true, utmSource: true, adId: true } } },
     }),
   ]);
+  const firstTimes = await getFirstOrderTimes();
 
   // Meta's revenue can only ever contain sales that came through Meta ads,
-  // so the gap is only meaningful against GHL sales that did too. Organic,
-  // email and direct sales are split out instead of inflating the gap.
-  const META_SOURCES = ["meta", "facebook", "fb", "ig", "instagram"];
+  // so the gap is only meaningful against GHL sales that did too. Organic
+  // sales (returning customers buying later, email, direct) are split out
+  // instead of being credited to Meta or inflating the gap.
   let ghlMetaRevenue = 0;
   let ghlOtherRevenue = 0;
   for (const o of rangeOrders) {
-    const source = (o.contact?.utmSource ?? "").toLowerCase();
-    const metaDriven =
-      !!o.contact?.adId || !!o.contact?.fbclid || META_SOURCES.some((m) => source === m || source.startsWith(m + " "));
-    if (metaDriven) ghlMetaRevenue += Number(o.amount);
+    if (orderSource(o.contact, o.occurredAt, firstTimes.get(o.contactId)) === "meta") ghlMetaRevenue += Number(o.amount);
     else ghlOtherRevenue += Number(o.amount);
   }
 
@@ -302,6 +301,7 @@ export type RangeTransaction = {
   email: string | null;
   productName: string | null;
   isDuplicate: boolean;
+  isOrganic: boolean;
 };
 
 // The transaction list shown on the homepage for whatever date range is
@@ -320,6 +320,7 @@ export async function getRangeTransactions(since: Date, until: Date, timeZone: s
     include: { contact: true },
     orderBy: { occurredAt: "desc" },
   });
+  const firstTimes = await getFirstOrderTimes();
 
   const dups = markDuplicates(
     orders.map((o) => ({
@@ -350,6 +351,7 @@ export async function getRangeTransactions(since: Date, until: Date, timeZone: s
       email: o.contact?.email ?? null,
       productName: o.productName ?? o.sourceName ?? null,
       isDuplicate: dups.has(o.id),
+      isOrganic: orderSource(o.contact, o.occurredAt, firstTimes.get(o.contactId)) === "organic",
     }));
 }
 

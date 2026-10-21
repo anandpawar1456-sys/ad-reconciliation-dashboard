@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getFirstOrderTimes, isJourneyOrder } from "@/lib/journey";
 import { getSettings } from "@/lib/settings";
 import { getUtcDayRange, toLocalDateLabel, DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { isExcludedCampaignName, notExcludedCustomer } from "@/lib/excludedCampaigns";
@@ -28,7 +29,7 @@ export async function planInference(daysBack = 45): Promise<Map<string, Inferred
   const since = new Date(today.getTime() - daysBack * DAY_MS);
   const range = { start: getUtcDayRange(since, timeZone).start, end: getUtcDayRange(today, timeZone).end };
 
-  const [orders, insights] = await Promise.all([
+  const [allOrders, insights, firstTimes] = await Promise.all([
     prisma.ghlOrder.findMany({
       where: { ...notExcludedCustomer, occurredAt: { gte: range.start, lt: range.end }, status: "completed" },
       select: { id: true, contactId: true, amount: true, occurredAt: true, contact: { select: { adId: true } } },
@@ -37,7 +38,10 @@ export async function planInference(daysBack = 45): Promise<Map<string, Inferred
       where: { level: "ad", date: { gte: since, lte: today } },
       select: { date: true, adId: true, adsetId: true, campaignId: true, campaignName: true, purchaseValue: true },
     }),
+    getFirstOrderTimes(),
   ]);
+  // only first-journey orders can belong to an ad; later organic ones never match
+  const orders = allOrders.filter((o) => isJourneyOrder(o.occurredAt, firstTimes.get(o.contactId)));
 
   const attributedByDayAd = new Map<string, number>();
   const unattributedByDay = new Map<string, DayOrder[]>();

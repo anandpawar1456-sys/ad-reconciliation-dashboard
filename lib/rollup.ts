@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { GhlOrder, GhlContact, MetaInsight } from "@prisma/client";
 import { getSettings } from "@/lib/settings";
 import { getUtcDayRange, DEFAULT_TIMEZONE } from "@/lib/timezone";
+import { getFirstOrderTimes, isJourneyOrder } from "@/lib/journey";
 import { EXCLUDED_CAMPAIGN_KEYWORDS, notExcludedCampaignName, notExcludedCustomer } from "@/lib/excludedCampaigns";
 
 // Only orders in these statuses count as real revenue. Confirmed against
@@ -46,9 +47,19 @@ export async function computeDailyRollup(labelDate: Date): Promise<void> {
     });
   }
 
+  // Orders placed well after the customer's first purchase (e.g. an upsell
+  // bought from an email days later) are ORGANIC: they still count toward
+  // total revenue, but are never credited to the ad that sold the front end.
+  const firstTimes = await getFirstOrderTimes();
+  const adOrders = orders.filter((o) => isJourneyOrder(o.occurredAt, firstTimes.get(o.contactId)));
+  const organicIds = orders.filter((o) => !adOrders.includes(o)).map((o) => o.id);
+  if (organicIds.length > 0) {
+    await prisma.unmatchedTransaction.deleteMany({ where: { ghlOrderId: { in: organicIds }, status: "NEEDS_REVIEW" } });
+  }
+
   await upsertDailyReconciliation(labelDate, orders, metaRows);
-  await upsertAdAttribution(labelDate, orders, metaRows);
-  await flagUnmatchedTransactions(orders);
+  await upsertAdAttribution(labelDate, adOrders, metaRows);
+  await flagUnmatchedTransactions(adOrders);
 }
 
 // `since`/`until` must already be label dates (see computeDailyRollup).
@@ -113,6 +124,11 @@ async function upsertAdAttribution(
 
   const metaByAd = new Map(metaRows.filter((r) => r.adId).map((r) => [r.adId as string, r]));
   const adIds = new Set([...ghlRevenueByAd.keys(), ...metaByAd.keys()]);
+
+  // Rows written before an order was reclassified as organic can be left
+  // with nothing behind them — remove any ad row that no longer has either
+  // Meta data or an attributed order for this day.
+  await prisma.adAttribution.deleteMany({ where: { date: dayStart, adId: { notIn: [...adIds] } } });
 
   for (const adId of adIds) {
     const ghlRevenue = ghlRevenueByAd.get(adId) ?? 0;

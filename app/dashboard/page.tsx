@@ -69,8 +69,9 @@ export default async function DashboardPage({
         </div>
 
         {/* Stat tiles */}
-        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-7">
           <StatTile label="GHL Revenue" value={formatCurrency(data.totals.ghlRevenue)} />
+          <StatTile label="Organic Sales" value={formatCurrency(data.totals.ghlOtherRevenue)} />
           <StatTile label="Meta Reported Revenue" value={formatCurrency(data.totals.metaRevenue)} />
           <StatTile label="Meta Ad Spend" value={formatCurrency(data.totals.metaSpend)} />
           <StatTile
@@ -86,9 +87,10 @@ export default async function DashboardPage({
 
         {data.totals.ghlOtherRevenue > 0 && (
           <p className="mt-3 text-xs text-ink-400">
-            Gap compares Meta&apos;s revenue with the {formatCurrency(data.totals.ghlMetaRevenue)} of GHL sales that came through Meta
-            ads. {formatCurrency(data.totals.ghlOtherRevenue)} of GHL sales (organic, email, direct) are excluded since Meta can&apos;t
-            see them.
+            Organic sales are GHL orders Meta can&apos;t claim: customers who came back on their own (for example an upsell
+            bought from an email days after the front end), plus email and direct sales. They are kept out of the gap and
+            out of every ad&apos;s numbers. The gap compares Meta&apos;s revenue with the{" "}
+            {formatCurrency(data.totals.ghlMetaRevenue)} of GHL sales that came through Meta ads.
           </p>
         )}
 
@@ -133,6 +135,11 @@ export default async function DashboardPage({
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="w-28 shrink-0 text-xs font-medium text-ink-400">{t.dateTime}</span>
+                    {t.isOrganic && (
+                      <span className="shrink-0 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-700">
+                        Organic
+                      </span>
+                    )}
                     {t.isDuplicate && (
                       <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
                         Duplicate

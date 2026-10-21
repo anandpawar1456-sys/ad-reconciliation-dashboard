@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
+import { getFirstOrderTimes, isJourneyOrder } from "@/lib/journey";
 import { isExcludedCampaignName, notExcludedCampaignName, notExcludedCustomer } from "@/lib/excludedCampaigns";
 import { getUtcRangeForLabels, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
@@ -149,10 +150,13 @@ async function getHierarchySummaries(
             : undefined
         : undefined,
     },
-    select: { amount: true, contact: { select: { campaignId: true, adsetId: true, adId: true } } },
+    select: { amount: true, contactId: true, occurredAt: true, contact: { select: { campaignId: true, adsetId: true, adId: true } } },
   });
+  const firstTimes = await getFirstOrderTimes();
   const ghlRevenueById = new Map<string, number>();
   for (const order of ghlOrders) {
+    // organic sales (a returning customer buying later) don't belong to the ad
+    if (!isJourneyOrder(order.occurredAt, firstTimes.get(order.contactId))) continue;
     const id = order.contact?.[contactField as "campaignId" | "adsetId" | "adId"];
     if (!id) continue;
     ghlRevenueById.set(id, (ghlRevenueById.get(id) ?? 0) + Number(order.amount));
@@ -260,7 +264,10 @@ export async function getAdCustomers(adId: string, since: Date, until: Date): Pr
     include: { contact: { select: { email: true, phone: true } } },
     orderBy: { occurredAt: "desc" },
   });
-  return orders.map((o) => ({
+  const firstTimes = await getFirstOrderTimes();
+  return orders
+    .filter((o) => isJourneyOrder(o.occurredAt, firstTimes.get(o.contactId)))
+    .map((o) => ({
     orderId: o.id,
     contactId: o.contactId,
     email: o.contact.email,
