@@ -62,50 +62,66 @@ export async function fetchMetaInsights(params: {
     "unique_inline_link_clicks",
   ].join(",");
 
-  const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${adAccountId}/insights`);
-  url.searchParams.set("level", "ad");
-  url.searchParams.set("time_increment", "1");
-  url.searchParams.set("time_range", JSON.stringify({ since, until }));
-  url.searchParams.set("fields", fields);
-  url.searchParams.set("limit", "500");
-  url.searchParams.set("access_token", accessToken);
-
+  // One request PER DAY, not one for the whole range. For a multi-day range
+  // with time_increment=1, Meta's API returns full spend only for the LAST day
+  // of the range and near-zero spend for the earlier days (e.g. Oct 20 came
+  // back as $1.27 inside an Oct 18-21 request but $375.94 on its own), which
+  // made every sync overwrite good data with bad. Single-day requests are
+  // correct, so loop over the days.
   const rows: MetaInsightRow[] = [];
-  let nextUrl: string | null = url.toString();
+  for (const day of eachDay(since, until)) {
+    const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${adAccountId}/insights`);
+    url.searchParams.set("level", "ad");
+    url.searchParams.set("time_increment", "1");
+    url.searchParams.set("time_range", JSON.stringify({ since: day, until: day }));
+    url.searchParams.set("fields", fields);
+    url.searchParams.set("limit", "500");
+    url.searchParams.set("access_token", accessToken);
 
-  while (nextUrl) {
-    const res: Response = await fetch(nextUrl, { cache: "no-store" });
-    if (!res.ok) {
-      throw new Error(`Meta insights fetch failed (${res.status}): ${await res.text()}`);
+    let nextUrl: string | null = url.toString();
+    while (nextUrl) {
+      const res: Response = await fetch(nextUrl, { cache: "no-store" });
+      if (!res.ok) {
+        throw new Error(`Meta insights fetch failed (${res.status}): ${await res.text()}`);
+      }
+      const json = await res.json();
+
+      for (const item of json.data ?? []) {
+        rows.push({
+          date: item.date_start,
+          level: "ad",
+          campaignId: item.campaign_id,
+          campaignName: item.campaign_name,
+          adsetId: item.adset_id,
+          adsetName: item.adset_name,
+          adId: item.ad_id,
+          adName: item.ad_name,
+          spend: Number(item.spend ?? 0),
+          purchases: pickByPriority(item.actions, PURCHASE_ACTION_PRIORITY),
+          purchaseValue: pickByPriority(item.action_values, PURCHASE_ACTION_PRIORITY),
+          impressions: Number(item.impressions ?? 0),
+          clicks: Number(item.clicks ?? 0),
+          ctr: Number(item.ctr ?? 0),
+          frequency: Number(item.frequency ?? 0),
+          reach: Number(item.reach ?? 0),
+          uniqueLinkClicks: Number(item.unique_inline_link_clicks ?? 0),
+        });
+      }
+
+      nextUrl = json.paging?.next ?? null;
     }
-    const json = await res.json();
-
-    for (const item of json.data ?? []) {
-      rows.push({
-        date: item.date_start,
-        level: "ad",
-        campaignId: item.campaign_id,
-        campaignName: item.campaign_name,
-        adsetId: item.adset_id,
-        adsetName: item.adset_name,
-        adId: item.ad_id,
-        adName: item.ad_name,
-        spend: Number(item.spend ?? 0),
-        purchases: pickByPriority(item.actions, PURCHASE_ACTION_PRIORITY),
-        purchaseValue: pickByPriority(item.action_values, PURCHASE_ACTION_PRIORITY),
-        impressions: Number(item.impressions ?? 0),
-        clicks: Number(item.clicks ?? 0),
-        ctr: Number(item.ctr ?? 0),
-        frequency: Number(item.frequency ?? 0),
-        reach: Number(item.reach ?? 0),
-        uniqueLinkClicks: Number(item.unique_inline_link_clicks ?? 0),
-      });
-    }
-
-    nextUrl = json.paging?.next ?? null;
   }
 
   return rows;
+}
+
+// Every YYYY-MM-DD from `since` to `until`, inclusive.
+function eachDay(since: string, until: string): string[] {
+  const days: string[] = [];
+  for (let t = Date.parse(`${since}T00:00:00Z`); t <= Date.parse(`${until}T00:00:00Z`); t += 24 * 60 * 60 * 1000) {
+    days.push(new Date(t).toISOString().slice(0, 10));
+  }
+  return days;
 }
 
 function pickByPriority(entries: MetaActionEntry[] | undefined, priority: string[]): number {
