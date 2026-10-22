@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import NavBar from "../../../../dashboard/NavBar";
 import DateRangePicker from "../../../../dashboard/DateRangePicker";
 import HierarchyTable from "../../../HierarchyTable";
+import BudgetChanges from "../../../BudgetChanges";
+import { getBudgetChanges } from "@/lib/budget";
 import { getAdSummaries, getAdSetName, getCampaignName } from "@/lib/campaignQueries";
 import { getEarliestDataDate } from "@/lib/dashboardQueries";
 import { getSettings } from "@/lib/settings";
@@ -30,6 +32,7 @@ export default async function AdSetDetailPage({
   const resolved = resolveRange(preset, timeZone, earliestDataDate, searchParams.since, searchParams.until);
 
   const ads = await getAdSummaries(params.adsetId, resolved.since, resolved.until);
+  const budgetChanges = await getBudgetChanges({ since: resolved.since, until: resolved.until, objectIds: [params.adsetId] });
 
   const dateParams: Record<string, string> = { range: preset };
   if (searchParams.since) dateParams.since = searchParams.since;
@@ -71,6 +74,8 @@ export default async function AdSetDetailPage({
             linkQuery={new URLSearchParams(dateParams).toString()}
           />
         </div>
+
+        <BudgetChanges changes={budgetChanges} periodLabel={resolved.label} timeZone={timeZone} />
       </main>
     </div>
   );

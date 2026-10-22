@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { getFirstOrderTimes, isJourneyOrder } from "@/lib/journey";
+import { getBudgetStatuses, type BudgetStatus } from "@/lib/budget";
 import { isExcludedCampaignName, notExcludedCampaignName, notExcludedCustomer } from "@/lib/excludedCampaigns";
 import { getUtcRangeForLabels, DEFAULT_TIMEZONE } from "@/lib/timezone";
 
@@ -32,6 +33,7 @@ export type HierarchySummary = {
   ctr: number;
   frequency: number;
   cpa: number | null; // spend / purchases — Meta's own purchase count, not GHL's
+  budget: BudgetStatus | null; // current budget + when it last changed (campaigns and ad sets only)
 };
 
 type Level = "campaign" | "adset" | "ad";
@@ -94,6 +96,7 @@ async function getHierarchySummaries(
       ctr: 0,
       frequency: 0,
       cpa: null,
+      budget: null,
     };
   }
 
@@ -162,6 +165,8 @@ async function getHierarchySummaries(
     ghlRevenueById.set(id, (ghlRevenueById.get(id) ?? 0) + Number(order.amount));
   }
 
+  const budgets = level === "ad" ? new Map<string, BudgetStatus>() : await getBudgetStatuses();
+
   const summaries = [...byId.values()].map((c) => {
     const recoveredRevenue = recoveredById.get(c.id) ?? 0;
     const trueRevenue = trueRevenueById.get(c.id) ?? c.metaRevenue;
@@ -179,6 +184,7 @@ async function getHierarchySummaries(
       ctr: c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0,
       frequency: freq && freq.count > 0 ? freq.sum / freq.count : 0,
       cpa: c.purchases > 0 ? c.spend / c.purchases : null,
+      budget: budgets.get(c.id) ?? null,
     };
   });
 

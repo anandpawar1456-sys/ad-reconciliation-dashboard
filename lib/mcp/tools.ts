@@ -14,6 +14,7 @@ import { getCampaignSummaries, getAdSetSummaries, getAdSummaries, type Hierarchy
 import { searchAds, getAdHistory } from "@/lib/adLookup";
 import { getDuplicateRows, groupDuplicates } from "@/lib/duplicates";
 import { getOrganicBreakdown } from "@/lib/organic";
+import { getBudgetChanges } from "@/lib/budget";
 import { getGhlFunnelStepNames } from "@/lib/ghl";
 import { formatLabelDate } from "@/lib/format";
 
@@ -30,6 +31,7 @@ Definitions:
 - Gap = Meta-driven GHL revenue minus Meta-reported revenue.
 - Duplicate = same customer, same funnel step (product) and same amount charged again within 24 hours. The first charge is the real sale.
 - Excluded from everything: the India "Moto" campaigns (sold on a separate WordPress site) and the owner's own test purchases.
+- Budget changes come from Meta's activity log. Campaign rows include the current budget and how many days it has been unchanged. Use budget_changes to compare 3 days before vs 3 days after a raise or cut.
 - Customer identities are deliberately hidden.
 Data freshness: GHL orders sync about every 15 minutes, Meta ad data hourly. Call data_status to see the last sync times.`;
 
@@ -89,6 +91,17 @@ function campaignRow(r: HierarchySummary) {
     ghlProfit: r2(r.ghlProfit),
     metaPurchases: r.purchases,
     cpa: nz(r.cpa),
+    currentBudget: r.budget
+      ? {
+          amount: r2(r.budget.amount),
+          type: r.budget.type,
+          source: r.budget.source,
+          unchangedDays: r.budget.unchangedDays,
+          lastChange: r.budget.lastChangeAt
+            ? { at: r.budget.lastChangeAt, from: r.budget.lastChangeFrom, to: r.budget.lastChangeTo }
+            : null,
+        }
+      : null,
     ctrPercent: r2(r.ctr),
     impressions: r.impressions,
     uniqueLinkClicks: r.uniqueLinkClicks,
@@ -402,6 +415,59 @@ export const TOOLS: ToolDef[] = [
           extraCharged: r2(g.extraCharged),
           originalAt: g.originalAt.toISOString(),
           repeatsAt: g.repeats.map((r) => ({ at: r.at.toISOString(), minutesAfterOriginal: r.minutesAfterOriginal })),
+        })),
+      };
+    },
+  },
+  {
+    name: "budget_changes",
+    description:
+      "Budget raises and cuts on ad sets and campaigns (from Meta's activity log) in a date range: when, old budget to new budget, percent change, how long the old budget lasted, and spend per day, true ROAS and CPA for the 3 completed days BEFORE vs the 3 days AFTER each change. Use it to see whether raising a budget hurt ROAS or a cut saved money. nextChangeInAfterWindow marks results mixed by a second change.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        campaign_id: { type: "string", description: "Only this campaign and its ad sets." },
+        ad_set_id: { type: "string", description: "Only this ad set." },
+        limit: { type: "number", description: "Max changes. Default 30." },
+        ...rangeProps,
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const { since, until, period } = await resolveArgs(args);
+      const limit = Math.min(Math.max(Number(args.limit) || 30, 1), 100);
+      const changes = await getBudgetChanges({
+        since,
+        until,
+        limit,
+        campaignId: typeof args.campaign_id === "string" ? args.campaign_id : undefined,
+        objectIds: typeof args.ad_set_id === "string" ? [args.ad_set_id] : undefined,
+      });
+      const win = (w: (typeof changes)[number]["before"]) => ({
+        completedDays: w.days,
+        avgDailySpend: nz(w.avgDailySpend),
+        trueRoas: nz(w.trueRoas),
+        cpa: nz(w.cpa),
+        purchases: w.purchases,
+      });
+      return {
+        period,
+        count: changes.length,
+        changes: changes.map((c) => ({
+          at: c.at.toISOString(),
+          level: c.level,
+          name: c.objectName,
+          id: c.objectId,
+          campaign: c.campaignName,
+          budgetType: c.budgetType,
+          oldBudget: r2(c.oldBudget),
+          newBudget: r2(c.newBudget),
+          changePercent: r2(c.changePercent),
+          direction: c.direction,
+          oldBudgetLastedDays: c.oldBudgetLastedDays,
+          before3Days: win(c.before),
+          after3Days: win(c.after),
+          nextChangeInAfterWindow: c.nextChangeInAfterWindowAt ? c.nextChangeInAfterWindowAt.toISOString() : null,
         })),
       };
     },

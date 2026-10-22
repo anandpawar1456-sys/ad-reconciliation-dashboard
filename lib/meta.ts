@@ -139,6 +139,8 @@ export type MetaCampaignRow = {
   status: string; // ACTIVE | PAUSED | DELETED | ARCHIVED
   effectiveStatus: string; // e.g. ACTIVE, PAUSED, CAMPAIGN_PAUSED, ADSET_PAUSED
   objective?: string;
+  dailyBudget: number | null; // dollars; null when the budget lives on the ad sets
+  lifetimeBudget: number | null;
 };
 
 // A separate endpoint from insights — the campaign's own object, for its
@@ -151,7 +153,7 @@ export async function fetchMetaCampaigns(params: {
   const { accessToken, adAccountId } = params;
 
   const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${adAccountId}/campaigns`);
-  url.searchParams.set("fields", "id,name,status,effective_status,objective");
+  url.searchParams.set("fields", "id,name,status,effective_status,objective,daily_budget,lifetime_budget");
   url.searchParams.set("limit", "200");
   url.searchParams.set("access_token", accessToken);
 
@@ -172,6 +174,8 @@ export async function fetchMetaCampaigns(params: {
         status: item.status,
         effectiveStatus: item.effective_status,
         objective: item.objective,
+        dailyBudget: minorToDollars(item.daily_budget),
+        lifetimeBudget: minorToDollars(item.lifetime_budget),
       });
     }
 
@@ -181,7 +185,15 @@ export async function fetchMetaCampaigns(params: {
   return rows;
 }
 
-export type MetaAdSetRow = { id: string; name: string; campaignId: string; status: string; effectiveStatus: string };
+export type MetaAdSetRow = {
+  id: string;
+  name: string;
+  campaignId: string;
+  status: string;
+  effectiveStatus: string;
+  dailyBudget: number | null;
+  lifetimeBudget: number | null;
+};
 export type MetaAdRow = { id: string; name: string; adsetId: string; campaignId: string; status: string; effectiveStatus: string };
 
 // Account-level list calls (not per-campaign/per-adset — one call each
@@ -190,7 +202,7 @@ export type MetaAdRow = { id: string; name: string; adsetId: string; campaignId:
 export async function fetchMetaAdSets(params: { accessToken: string; adAccountId: string }): Promise<MetaAdSetRow[]> {
   const { accessToken, adAccountId } = params;
   const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${adAccountId}/adsets`);
-  url.searchParams.set("fields", "id,name,campaign_id,status,effective_status");
+  url.searchParams.set("fields", "id,name,campaign_id,status,effective_status,daily_budget,lifetime_budget");
   url.searchParams.set("limit", "500");
   url.searchParams.set("access_token", accessToken);
 
@@ -207,6 +219,8 @@ export async function fetchMetaAdSets(params: { accessToken: string; adAccountId
         campaignId: item.campaign_id,
         status: item.status,
         effectiveStatus: item.effective_status,
+        dailyBudget: minorToDollars(item.daily_budget),
+        lifetimeBudget: minorToDollars(item.lifetime_budget),
       });
     }
     nextUrl = json.paging?.next ?? null;
@@ -235,6 +249,79 @@ export async function fetchMetaAds(params: { accessToken: string; adAccountId: s
         campaignId: item.campaign_id,
         status: item.status,
         effectiveStatus: item.effective_status,
+      });
+    }
+    nextUrl = json.paging?.next ?? null;
+  }
+  return rows;
+}
+
+// Meta reports budgets in the account currency's minor unit (cents for USD),
+// as strings; "0"/missing means no budget at that level.
+function minorToDollars(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n / 100 : null;
+}
+
+export type MetaBudgetChangeRow = {
+  id: string;
+  eventTime: Date;
+  level: "adset" | "campaign";
+  objectId: string;
+  objectName: string;
+  budgetType: "daily" | "lifetime";
+  oldBudget: number;
+  newBudget: number;
+  actor: string | null;
+};
+
+// Budget raises/cuts from the ad account's activity log
+// (/act_<id>/activities). Only update_ad_set_budget and update_campaign_budget
+// are real changes; the *_scheduling_state events are toggles and ignored.
+// Each event carries the old and new amount in cents.
+export async function fetchMetaBudgetChanges(params: {
+  accessToken: string;
+  adAccountId: string;
+  since: Date;
+}): Promise<MetaBudgetChangeRow[]> {
+  const { accessToken, adAccountId, since } = params;
+  const url = new URL(`https://graph.facebook.com/${META_API_VERSION}/${adAccountId}/activities`);
+  url.searchParams.set("fields", "event_type,object_name,object_id,event_time,actor_name,extra_data");
+  url.searchParams.set("since", String(Math.floor(since.getTime() / 1000)));
+  url.searchParams.set("limit", "500");
+  url.searchParams.set("access_token", accessToken);
+
+  const rows: MetaBudgetChangeRow[] = [];
+  let nextUrl: string | null = url.toString();
+  while (nextUrl) {
+    const res: Response = await fetch(nextUrl, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Meta activities fetch failed (${res.status}): ${await res.text()}`);
+    const json = await res.json();
+
+    for (const item of json.data ?? []) {
+      const level = item.event_type === "update_ad_set_budget" ? "adset" : item.event_type === "update_campaign_budget" ? "campaign" : null;
+      if (!level) continue;
+      let extra: { old_value?: { old_value?: number }; new_value?: { new_value?: number; additional_value?: string } };
+      try {
+        extra = JSON.parse(item.extra_data);
+      } catch {
+        continue;
+      }
+      const oldCents = Number(extra.old_value?.old_value);
+      const newCents = Number(extra.new_value?.new_value);
+      if (!Number.isFinite(oldCents) || !Number.isFinite(newCents)) continue;
+
+      const eventTime = new Date(String(item.event_time).replace(/([+-]\d\d)(\d\d)$/, "$1:$2"));
+      rows.push({
+        id: `${item.object_id}:${Math.floor(eventTime.getTime() / 1000)}:${item.event_type}`,
+        eventTime,
+        level,
+        objectId: String(item.object_id),
+        objectName: item.object_name ?? "",
+        budgetType: String(extra.new_value?.additional_value ?? "").toLowerCase().includes("lifetime") ? "lifetime" : "daily",
+        oldBudget: oldCents / 100,
+        newBudget: newCents / 100,
+        actor: item.actor_name ?? null,
       });
     }
     nextUrl = json.paging?.next ?? null;

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatCurrency, formatRoas, formatCpa } from "@/lib/format";
 import StatusBadge from "./StatusBadge";
 import type { HierarchySummary } from "@/lib/campaignQueries";
+import type { BudgetStatus } from "@/lib/budget";
 
 // The one table used at every drill-down level (campaigns, ad sets within
 // a campaign, ads within an ad set) — same columns, same look, like Ads
@@ -72,6 +73,7 @@ export default function HierarchyTable({
   const totalTrueRoas = totals.spend > 0 ? totals.trueRevenue / totals.spend : null;
   const totalCtr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
   const totalCpa = totals.purchases > 0 ? totals.spend / totals.purchases : null;
+  const totalBudget = visibleRows.reduce((sum, r) => sum + (r.budget && r.budget.type === "daily" ? r.budget.amount : 0), 0);
 
   function toggleRow(id: string) {
     setSelected((prev) => {
@@ -112,13 +114,14 @@ export default function HierarchyTable({
         </div>
       )}
 
-      <table className="w-full min-w-[1680px] text-sm">
+      <table className="w-full min-w-[1800px] text-sm">
         <thead>
           <tr className="border-b border-ink-900/10 text-left text-xs font-semibold uppercase tracking-wide text-ink-400">
             <th className="py-3 pr-2 w-8" />
             <th className="py-3 pr-4">{nameLabel}</th>
             <th className="py-3 pr-4">Status</th>
             <th className="py-3 pr-4">Spend</th>
+            <th className="py-3 pr-4">Budget</th>
             <th className="py-3 pr-4">Meta Revenue</th>
             <th className="py-3 pr-4">Reported ROAS</th>
             <th className="py-3 pr-4">Recovered</th>
@@ -165,6 +168,9 @@ export default function HierarchyTable({
                   <StatusBadge status={r.effectiveStatus} />
                 </td>
                 <td className="py-3 pr-4 text-ink-700">{formatCurrency(r.spend)}</td>
+                <td className="py-3 pr-4">
+                  <BudgetCell b={r.budget} />
+                </td>
                 <td className="py-3 pr-4 text-ink-700">{formatCurrency(r.metaRevenue)}</td>
                 <td className="py-3 pr-4 text-ink-700">{formatRoas(r.metaRoas)}</td>
                 <td className={`py-3 pr-4 font-semibold ${lift ? "text-emerald-500" : "text-ink-400"}`}>
@@ -196,6 +202,7 @@ export default function HierarchyTable({
             <td className="py-3 pr-4 text-ink-900">Total</td>
             <td className="py-3 pr-4" />
             <td className="py-3 pr-4 text-ink-900">{formatCurrency(totals.spend)}</td>
+            <td className="py-3 pr-4 text-ink-900">{totalBudget > 0 ? `${formatCurrency(totalBudget)}/day` : ""}</td>
             <td className="py-3 pr-4 text-ink-900">{formatCurrency(totals.metaRevenue)}</td>
             <td className="py-3 pr-4 text-ink-900">{formatRoas(totalMetaRoas)}</td>
             <td className="py-3 pr-4 text-emerald-500">
@@ -218,6 +225,34 @@ export default function HierarchyTable({
           </tr>
         </tfoot>
       </table>
+    </div>
+  );
+}
+
+const money = (n: number) => formatCurrency(n).replace(/\.00$/, "");
+
+// Current budget with how long it has been the same, or what it just changed from.
+function BudgetCell({ b }: { b: BudgetStatus | null }) {
+  if (!b) return <span className="text-ink-400">-</span>;
+  const unit = b.type === "daily" ? "/day" : " lifetime";
+  const days = b.unchangedDays;
+  const recentChange = days !== null && days <= 3 && b.lastChangeFrom !== null && b.lastChangeTo !== null;
+  const raised = recentChange && (b.lastChangeTo as number) >= (b.lastChangeFrom as number);
+
+  return (
+    <div className="leading-tight">
+      <div className="font-semibold text-ink-900">
+        {money(b.amount)}
+        <span className="font-medium text-ink-400">{unit}</span>
+        {b.source === "adsets" && <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-ink-400">ad sets</span>}
+      </div>
+      <div className={`mt-0.5 text-xs font-semibold ${recentChange ? (raised ? "text-emerald-600" : "text-rose-500") : "text-ink-400"}`}>
+        {recentChange
+          ? `${raised ? "▲" : "▼"} from ${money(b.lastChangeFrom as number)} · ${days === 0 ? "today" : `${days}d ago`}`
+          : days !== null
+            ? `same for ${days} day${days === 1 ? "" : "s"}`
+            : "no change on record"}
+      </div>
     </div>
   );
 }

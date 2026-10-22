@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
-import { fetchMetaInsights, fetchMetaCampaigns, fetchMetaAdSets, fetchMetaAds } from "@/lib/meta";
+import { fetchMetaInsights, fetchMetaCampaigns, fetchMetaAdSets, fetchMetaAds, fetchMetaBudgetChanges } from "@/lib/meta";
 import { computeRollupRange } from "@/lib/rollup";
 import { resolveUnattributedContacts } from "@/lib/attributionResolve";
 import { toLocalDateLabel, DEFAULT_TIMEZONE } from "@/lib/timezone";
@@ -112,12 +112,13 @@ export async function syncMetaInsights(since: string, until: string): Promise<Me
   // moved (hundreds of sequential upserts would otherwise eat most of the
   // function's time budget).
   const [knownCampaigns, knownAdSets, knownAds] = await Promise.all([
-    prisma.metaCampaign.findMany({ select: { id: true, name: true, status: true, effectiveStatus: true } }),
-    prisma.metaAdSet.findMany({ select: { id: true, name: true, campaignId: true, status: true, effectiveStatus: true } }),
+    prisma.metaCampaign.findMany({ select: { id: true, name: true, status: true, effectiveStatus: true, dailyBudget: true, lifetimeBudget: true } }),
+    prisma.metaAdSet.findMany({ select: { id: true, name: true, campaignId: true, status: true, effectiveStatus: true, dailyBudget: true, lifetimeBudget: true } }),
     prisma.metaAd.findMany({ select: { id: true, name: true, adsetId: true, campaignId: true, status: true, effectiveStatus: true } }),
   ]);
+  const norm = (v: unknown) => (v !== null && typeof v === "object" && "toNumber" in (v as object) ? (v as { toNumber(): number }).toNumber() : v);
   const same = (a: Record<string, unknown> | undefined, b: Record<string, unknown>) =>
-    !!a && Object.keys(b).every((k) => a[k] === b[k]);
+    !!a && Object.keys(b).every((k) => norm(a[k]) === norm(b[k]));
   const campaignById = new Map(knownCampaigns.map((c) => [c.id, c]));
   const adSetById = new Map(knownAdSets.map((c) => [c.id, c]));
   const adById = new Map(knownAds.map((c) => [c.id, c]));
@@ -128,7 +129,16 @@ export async function syncMetaInsights(since: string, until: string): Promise<Me
   }
 
   await inChunks(
-    campaigns.filter((c) => !same(campaignById.get(c.id), { name: c.name, status: c.status, effectiveStatus: c.effectiveStatus })),
+    campaigns.filter(
+      (c) =>
+        !same(campaignById.get(c.id), {
+          name: c.name,
+          status: c.status,
+          effectiveStatus: c.effectiveStatus,
+          dailyBudget: c.dailyBudget,
+          lifetimeBudget: c.lifetimeBudget,
+        })
+    ),
     (campaign) =>
       prisma.metaCampaign.upsert({
         where: { id: campaign.id },
@@ -138,12 +148,16 @@ export async function syncMetaInsights(since: string, until: string): Promise<Me
           status: campaign.status,
           effectiveStatus: campaign.effectiveStatus,
           objective: campaign.objective,
+          dailyBudget: campaign.dailyBudget,
+          lifetimeBudget: campaign.lifetimeBudget,
         },
         update: {
           name: campaign.name,
           status: campaign.status,
           effectiveStatus: campaign.effectiveStatus,
           objective: campaign.objective,
+          dailyBudget: campaign.dailyBudget,
+          lifetimeBudget: campaign.lifetimeBudget,
         },
       })
   );
@@ -156,13 +170,30 @@ export async function syncMetaInsights(since: string, until: string): Promise<Me
           campaignId: a.campaignId,
           status: a.status,
           effectiveStatus: a.effectiveStatus,
+          dailyBudget: a.dailyBudget,
+          lifetimeBudget: a.lifetimeBudget,
         })
     ),
     (adset) =>
       prisma.metaAdSet.upsert({
         where: { id: adset.id },
-        create: { id: adset.id, name: adset.name, campaignId: adset.campaignId, status: adset.status, effectiveStatus: adset.effectiveStatus },
-        update: { name: adset.name, campaignId: adset.campaignId, status: adset.status, effectiveStatus: adset.effectiveStatus },
+        create: {
+          id: adset.id,
+          name: adset.name,
+          campaignId: adset.campaignId,
+          status: adset.status,
+          effectiveStatus: adset.effectiveStatus,
+          dailyBudget: adset.dailyBudget,
+          lifetimeBudget: adset.lifetimeBudget,
+        },
+        update: {
+          name: adset.name,
+          campaignId: adset.campaignId,
+          status: adset.status,
+          effectiveStatus: adset.effectiveStatus,
+          dailyBudget: adset.dailyBudget,
+          lifetimeBudget: adset.lifetimeBudget,
+        },
       })
   );
 
@@ -184,6 +215,14 @@ export async function syncMetaInsights(since: string, until: string): Promise<Me
         update: { name: ad.name, adsetId: ad.adsetId, campaignId: ad.campaignId, status: ad.status, effectiveStatus: ad.effectiveStatus },
       })
   );
+
+  // Budget raises/cuts from Meta's activity log. A failure here (e.g. the
+  // activity endpoint hiccups) must not stop the spend/purchase sync.
+  try {
+    await syncBudgetChanges(settings.metaAccessToken, settings.metaAdAccountId, adsets);
+  } catch (err) {
+    console.error("Budget change sync failed", err);
+  }
 
   await prisma.integrationSettings.update({
     where: { id: 1 },
@@ -209,4 +248,41 @@ export async function getDefaultMetaRange(): Promise<{ since: string; until: str
   const todayLabel = toLocalDateLabel(new Date(), settings.reportingTimezone || DEFAULT_TIMEZONE);
   const sinceLabel = new Date(todayLabel.getTime() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
   return { since: sinceLabel.toISOString().slice(0, 10), until: todayLabel.toISOString().slice(0, 10) };
+}
+
+const BUDGET_LOOKBACK_DAYS = 14;
+
+// Stores budget changes from the activity log. Routine syncs look back two
+// weeks (cheap, idempotent upserts); pass an earlier `since` for a one-off
+// history backfill.
+export async function syncBudgetChanges(
+  accessToken: string,
+  adAccountId: string,
+  adsets: Array<{ id: string; campaignId: string }>,
+  since: Date = new Date(Date.now() - BUDGET_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+): Promise<number> {
+  const changes = await fetchMetaBudgetChanges({ accessToken, adAccountId, since });
+  const campaignOfAdSet = new Map(adsets.map((a) => [a.id, a.campaignId]));
+  const known = await prisma.metaAdSet.findMany({ select: { id: true, campaignId: true } });
+  for (const a of known) if (!campaignOfAdSet.has(a.id)) campaignOfAdSet.set(a.id, a.campaignId);
+
+  await runInChunks(changes, (c) =>
+    prisma.budgetChange.upsert({
+      where: { id: c.id },
+      create: {
+        id: c.id,
+        eventTime: c.eventTime,
+        level: c.level,
+        objectId: c.objectId,
+        objectName: c.objectName,
+        campaignId: c.level === "adset" ? campaignOfAdSet.get(c.objectId) ?? null : c.objectId,
+        budgetType: c.budgetType,
+        oldBudget: c.oldBudget,
+        newBudget: c.newBudget,
+        actor: c.actor,
+      },
+      update: { objectName: c.objectName },
+    })
+  );
+  return changes.length;
 }

@@ -221,6 +221,9 @@ model MetaCampaign {
   status          String // ACTIVE | PAUSED | DELETED | ARCHIVED
   effectiveStatus String // ACTIVE | PAUSED | CAMPAIGN_PAUSED | ADSET_PAUSED | ...
   objective       String?
+  // Campaign-level (CBO) budget in dollars; null when budgets live on the ad sets.
+  dailyBudget     Decimal? @db.Decimal(12, 2)
+  lifetimeBudget  Decimal? @db.Decimal(12, 2)
   updatedAt       DateTime @updatedAt
   createdAt       DateTime @default(now())
 
@@ -233,6 +236,8 @@ model MetaAdSet {
   campaignId      String
   status          String
   effectiveStatus String
+  dailyBudget     Decimal? @db.Decimal(12, 2)
+  lifetimeBudget  Decimal? @db.Decimal(12, 2)
   updatedAt       DateTime @updatedAt
   createdAt       DateTime @default(now())
 
@@ -253,4 +258,26 @@ model MetaAd {
   @@index([adsetId])
   @@index([campaignId])
   @@index([status])
+}
+
+
+// One row per budget change from Meta's ad-account activity log
+// (update_ad_set_budget / update_campaign_budget): when it happened, which
+// ad set or campaign, and the old and new budget in dollars.
+model BudgetChange {
+  id         String   @id // "<objectId>:<epochSeconds>:<eventType>" so re-syncs never duplicate
+  eventTime  DateTime
+  level      String // "adset" | "campaign"
+  objectId   String
+  objectName String
+  campaignId String? // parent campaign, for ad set changes
+  budgetType String // "daily" | "lifetime"
+  oldBudget  Decimal  @db.Decimal(12, 2)
+  newBudget  Decimal  @db.Decimal(12, 2)
+  actor      String?
+  createdAt  DateTime @default(now())
+
+  @@index([objectId, eventTime])
+  @@index([eventTime])
+  @@index([campaignId])
 }

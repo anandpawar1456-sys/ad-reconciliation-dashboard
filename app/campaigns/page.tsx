@@ -3,6 +3,8 @@ import NavBar from "../dashboard/NavBar";
 import DateRangePicker from "../dashboard/DateRangePicker";
 import HierarchyTable from "./HierarchyTable";
 import CpaChart from "./CpaChart";
+import BudgetChanges from "./BudgetChanges";
+import { getBudgetChanges } from "@/lib/budget";
 import { getCampaignSummaries, getCpaTrend } from "@/lib/campaignQueries";
 import { getEarliestDataDate } from "@/lib/dashboardQueries";
 import { getSettings } from "@/lib/settings";
@@ -32,6 +34,7 @@ export default async function CampaignsPage({
   const resolved = resolveRange(preset, timeZone, earliestDataDate, searchParams.since, searchParams.until);
 
   const campaigns = await getCampaignSummaries(resolved.since, resolved.until);
+  const budgetChanges = await getBudgetChanges({ since: resolved.since, until: resolved.until });
   const cpaTrend = await getCpaTrend(resolved.since, resolved.until);
   const cpaPoints = cpaTrend.map((p) => ({ label: formatShortDate(p.date), cpa: p.cpa }));
   const overallCpa =
@@ -104,6 +107,8 @@ export default async function CampaignsPage({
             linkQuery={new URLSearchParams(dateParams).toString()}
           />
         </div>
+
+        <BudgetChanges changes={budgetChanges} periodLabel={resolved.label} timeZone={timeZone} />
       </main>
     </div>
   );
