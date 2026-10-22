@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
   "/icon.png",
   "/apple-icon.png",
   "/api/cron",
+  "/api/mcp",
 ];
 
 export async function middleware(req: NextRequest) {
